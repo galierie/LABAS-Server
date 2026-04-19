@@ -7,7 +7,7 @@ import base64
 import cv2
 
 # MUST HAVE EXACT PATH OF settings_files
-config = Dynaconf(settings_files=["./certs/config.toml"], environments=False)
+config = Dynaconf(settings_files=["/opt/LABAS-Server/certs/config.toml"], environments=False)
 authenticator = MOSIPAuthenticator(config=config)
 
 # Given UIN and DOB from decoded QR

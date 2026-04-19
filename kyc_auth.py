@@ -45,6 +45,7 @@ def kyc_auth(uin: str, dob: str) -> Dict:
     img_base64 = base64.b64encode(buffer).decode("utf-8")
 
     return {
+        "uin": uin,
         "demographics": decrypted_response,
         "photo": img_base64
     }   

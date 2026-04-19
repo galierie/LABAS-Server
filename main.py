@@ -36,6 +36,5 @@ async def scan(payload: ScanRequest):
   return {
     "status": "sent", 
     "device_id": device_id, 
-    "mosip_reponse": mosip_response
   }
   

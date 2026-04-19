@@ -31,7 +31,7 @@ async def scan(payload: ScanRequest):
     }
 
   if device_id in precinct_officer:
-    precinct_officer[device_id].send_json(mosip_response)
+    await precinct_officer[device_id].send_json(mosip_response)
 
   return {
     "status": "sent", 

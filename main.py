@@ -38,3 +38,18 @@ async def scan(payload: ScanRequest):
     "device_id": device_id, 
   }
   
+# /display-pic/{device_id} is called by the PrecinctOfficer.
+# It uses a WebSocket to detect incoming data needed to be displayed.
+# Data is MOSIP ID data from /scan.
+@app.websocket("/diplay-pic/{device_id}")
+async def display_pic(websocket: WebSocket, device_id: str):
+  await websocket.accept()
+
+  if device_id not in precinct_officer:
+    precinct_officer[device_id] = websocket
+  
+  try:
+    while True:
+      await websocket.receive_text()
+  except WebSocketDisconnect:
+    precinct_officer.pop(device_id, None)

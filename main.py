@@ -20,18 +20,21 @@ class ScanRequest(BaseModel):
 async def scan(payload: ScanRequest):
   device_id = payload.device_id
 
-  # MOSIP Response from kyc_auth.py
-  uin: str = payload.qr.get("uin")
-  dob: str = payload.qr.get("dob")
   try:
-    mosip_response = kyc_auth(uin, dob)
+    # MOSIP Response from kyc_auth.py
+    uin: str = payload.qr.get("uin")
+    dob: str = payload.qr.get("dob")
+    response = kyc_auth(uin, dob)
+
+    # TODO: perform crosschecks with Cast Voter Database
+    # Must also send results to precinct_officer
   except Exception as e:
-    mosip_response = {
+    response = {
       "error": str(e)
     }
 
   if device_id in precinct_officer:
-    await precinct_officer[device_id].send_json(mosip_response)
+    await precinct_officer[device_id].send_json(response)
 
   return {
     "status": "sent", 

@@ -1,7 +1,6 @@
 # PULLING REPOSITORY
 
-Before pulling, we might want to `restore` first because editing permissions actually edits the file. So git might complain about a conflict. \
-Then after pulling, we give back the permissions for the `labas` group since we might not have those permissions when pushing from our local machines. 
+We could simply pull from the server repository. You might need to restart `fastapi` so that the service gets updated as well.
 ```bash
 git pull
 sudo systemctl restart fastapi

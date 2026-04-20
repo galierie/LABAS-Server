@@ -43,6 +43,8 @@ class Candidate(SQLModel, table=True):
     __tablename__ = "candidates"
     candidate_id: int = Field(primary_key=True)
     candidate_name: str
+    party: str | None = None
+    candidate_number: int
     position_id: int = Field(foreign_key="position.position_id")
     province_id: Optional[str] = Field(default=None, foreign_key="provinces.province_id")
     city_id: Optional[str] = Field(default=None, foreign_key="cities.city_id")
@@ -135,30 +137,30 @@ async def get_ballot(province: str, city: str):
                 ((Scope.scope_id == 2) & (Candidate.province_id == provID)) |
                 ((Scope.scope_id == 3) & (Candidate.city_id == cityID))
             )
-            .order_by(Scope.scope_id, Position.position_id, Candidate.candidate_name)
+          .order_by(Scope.scope_id, Position.position_id, Candidate.candidate_number)
         ).all()
 
         # Group by position
-        ballot = []
+        ballot = {}
         for candidate, position, scope in results:
             pos_name = position.position_name
             if pos_name not in ballot:
-                ballot.append({
+                ballot[pos_name] = {
                     "position_id": position.position_id,
                     "title": position.position_name,
                     "vote_for": position.max_votes,
                     "scope": scope.scope_name,
                     # Some fields from dale's sample ballot, can be changed later
-                    "instruction_en": "Vote for 12",
-                    "instruction_tl": "Bumoto ng hindi hihigit sa 12",
+                    "instruction_en": f"Vote for {position.max_votes}",
+                    "instruction_tl": f"Bumoto ng hindi hihigit sa {position.max_votes}",
                     "candidates": [],
-                })
+                }
             ballot[pos_name]["candidates"].append({
                 # TODO: add candidate number and party later
                 "id": candidate.candidate_id,
                 "name": candidate.candidate_name,
                 "number": candidate.candidate_number,
-                "party": candidate.party_name if candidate.party_name else "Independent",
+                "party": candidate.party if candidate.party else "Independent",
             })
 
         return {
@@ -172,5 +174,5 @@ async def get_ballot(province: str, city: str):
               "city": city,
 
             },
-            "positions": ballot,
+            "positions": list(ballot.values()),
         }

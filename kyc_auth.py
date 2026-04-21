@@ -25,9 +25,12 @@ def kyc_auth(uin: str, dob: str) -> Dict:
         demographic_data=demographics_data,
         consent=True,
     )
-    response_body = response.json()
-    decrypted_response = authenticator.decrypt_response(response_body)
-    face_bytes = base64.b64decode(decrypted_response.pop("photo"))
+    try:
+        response_body = response.json()
+        decrypted_response = authenticator.decrypt_response(response_body)
+        face_bytes = base64.b64decode(decrypted_response.pop("photo"))
+    except Exception as e:
+        raise Exception("QR Code does not match with an ID.")
 
     # Attempt to decode image from face_bytes
     img = None

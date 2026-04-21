@@ -61,16 +61,23 @@ async def scan(payload: ScanRequest):
 
   try:
     # MOSIP Response from kyc_auth.py
-    uin: str = payload.qr.get("uin")
-    dob: str = payload.qr.get("dob")
+    uin: str = payload.qr.get("uin", None)
+    dob: str = payload.qr.get("dob", None)
+    if uin == None or dob == None:
+       raise HTTPException(
+          status_code=400,
+          detail="QR missing UIN or DOB. Cannot authenticate."
+       )
     response = kyc_auth(uin, dob)
 
     # TODO: perform crosschecks with Cast Voter Database
     # Must also send results to precinct_officer
+
   except Exception as e:
-    response = {
-      "error": str(e)
-    }
+    raise HTTPException(
+      status_code=500,
+      detail=str(e)
+    )
 
   if device_id in precinct_officer:
     await precinct_officer[device_id].send_json(response)

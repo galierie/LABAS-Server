@@ -3,9 +3,11 @@ from pydantic import BaseModel
 from typing import Dict, Optional
 from kyc_auth import kyc_auth
 from sqlmodel import Field, Session, SQLModel, create_engine, select, col
+from dotenv import load_dotenv
+import os
 
 # Setup db stuff
-DATABASE_URL = "postgresql://mikel:pass123@localhost:5432/labas"
+DATABASE_URL = os.getenv("DATABASE_URL")
 engine = create_engine(DATABASE_URL)
 
 app = FastAPI()

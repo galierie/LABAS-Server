@@ -3,4 +3,4 @@ venv/
 authenticator.log
 __pycache__/
 .ssh/
-
+.env

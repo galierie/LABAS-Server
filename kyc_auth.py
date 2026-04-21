@@ -2,12 +2,16 @@ from mosip_auth_sdk.models import DemographicsModel
 from mosip_auth_sdk import MOSIPAuthenticator
 from dynaconf import Dynaconf
 from typing import Dict
+from dotenv import load_dotenv
+import os
 import numpy as np
 import base64
 import cv2
 
 # MUST HAVE EXACT PATH OF settings_files
-config = Dynaconf(settings_files=["/opt/LABAS-Server/certs/config.toml"], environments=False)
+load_dotenv()
+CONFIG_TOML = os.getenv("CONFIG_TOML")
+config = Dynaconf(settings_files=[CONFIG_TOML], environments=False)
 authenticator = MOSIPAuthenticator(config=config)
 
 # Given UIN and DOB from decoded QR

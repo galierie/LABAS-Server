@@ -82,7 +82,7 @@ async def scan(payload: ScanRequest):
 
   except Exception as e:
     # Display error on PrecinctOfficer's screen
-    await precinct_officer[device_id].send_json({"error": e})
+    await precinct_officer[device_id].send_json({"error": str(e)})
     # HTTP Response to ESP
     raise HTTPException(
       status_code=500,

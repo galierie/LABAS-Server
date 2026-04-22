@@ -6,6 +6,13 @@ git pull
 sudo systemctl restart fastapi
 ```
 
+**.env NOTE:** If this is your first cloning the repository locally, you need to copy `.env.sample` into `.env`.
+- Make sure `CONFIG_TOML` is the path of config.toml on your machine.
+- Make sure `DATABASE_URL` is has the correct USER-PASSWORD pair in the URL.
+```bash
+cp .env.sample .env
+``` 
+
 # Server Setup Notes
 
 ## Cloning the Server-side Repository

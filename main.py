@@ -62,29 +62,36 @@ class Candidate(SQLModel, table=True):
 async def scan(payload: ScanRequest):
   device_id = payload.device_id
 
+  # If PrecinctOfficer's local machine is not connected, raise an error to ESP
+  if device_id not in precinct_officer:
+    raise HTTPException(
+      status_code=500,
+      detail="PrecinctOfficer's local machine is not connected. Please try again after connecting it."
+    )
+
   try:
     # MOSIP Response from kyc_auth.py
     uin: str = payload.qr.get("uin", None)
     dob: str = payload.qr.get("dob", None)
     if uin == None or dob == None:
-       raise HTTPException(
-          status_code=400,
-          detail="QR missing UIN or DOB. Cannot authenticate."
-       )
+      raise Exception("QR missing UIN or DOB. Cannot authenticate")
     response = kyc_auth(uin, dob)
 
     # TODO: perform crosschecks with Cast Voter Database
     # Must also send results to precinct_officer
 
   except Exception as e:
+    # Display error on PrecinctOfficer's screen
+    await precinct_officer[device_id].send_json({"error": e})
+    # HTTP Response to ESP
     raise HTTPException(
       status_code=500,
       detail=str(e)
     )
 
-  if device_id in precinct_officer:
-    await precinct_officer[device_id].send_json(response)
-
+  # Display MOSIP response on PrecinctOfficer's screen
+  await precinct_officer[device_id].send_json(response)
+  # HTTP Response to ESP
   return {
     "status": "sent", 
     "device_id": device_id, 

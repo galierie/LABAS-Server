@@ -2,7 +2,8 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from pydantic import BaseModel
 from typing import Dict, Optional
 from kyc_auth import kyc_auth
-from sqlmodel import Field, Session, SQLModel, create_engine, select, col
+from sqlmodel import Field, Session, SQLModel, create_engine, select, col, text
+import orm
 from dotenv import load_dotenv
 import os
 
@@ -75,10 +76,21 @@ async def scan(payload: ScanRequest):
     dob: str = payload.qr.get("dob", None)
     if uin == None or dob == None:
       raise Exception("QR missing UIN or DOB. Cannot authenticate")
-    response = kyc_auth(uin, dob)
+    mosip_response = kyc_auth(uin, dob)
 
-    # TODO: perform crosschecks with Cast Voter Database
-    # Must also send results to precinct_officer
+    # Perform crosschecks with Cast Voter Database
+    # Also send results to PrecinctOfficer
+    with Session(engine) as session:
+      voter: orm.Voter = session.exec(
+        select(orm.Voter.uin, orm.Voter.precinct, orm.Voter.voted)
+        .where(orm.Voter.uin == uin)
+      ).first()
+    
+      voter_response = {
+        "registered": voter is not None, 
+        "precinct": voter.precinct if voter else None,
+        "voted": voter.voted if voter else False
+      }
 
   except Exception as e:
     # Display error on PrecinctOfficer's screen
@@ -89,7 +101,15 @@ async def scan(payload: ScanRequest):
       detail=str(e)
     )
 
-  # Display MOSIP response on PrecinctOfficer's screen
+  # Assuming everything is a success, display the MOSIP and voter checks on PrecinctOfficer's screen
+  response = {
+     "uin": mosip_response["uin"],
+     "demographics": mosip_response["demographics"],
+     "photo": mosip_response["photo"],
+     "registered_voter": voter_response["registered"],
+     "precinct": voter_response["precinct"],
+     "voted": voter_response["voted"]
+  } 
   await precinct_officer[device_id].send_json(response)
   # HTTP Response to ESP
   return {

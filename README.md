@@ -43,7 +43,7 @@ pip install requirements -r requirements.txt
 Be sure to be using your `venv`. Then we could use uvicorn to run FastAPI locally.
 ```bash
 source venv/bin/activate
-uvicorn main:app --host 0.0.0.0 --port 8000
+uvicorn main:app --host 127.0.0.1 --port 8000
 ```
 You may now access APIs at `http://127.0.0.1:8000`. For example, `http://127.0.0.1:8000/scan`.
 

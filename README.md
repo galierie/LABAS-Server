@@ -140,7 +140,7 @@ Some useful commands:
 - `sudo systemctl stop fastapi` - stop the service
 - `sudo systemctl restart fastapi` - for code changes
 - `sudo systemctl daemon-reload` - for `fastapi.service` edits
-- `journalctl -u fastapi -f` - check logs
+- `sudo journalctl -u fastapi -f` - check logs
 - `sudo systemctl disable fastapi` - to disable start on boot 
 
 ## Wireguard Setup

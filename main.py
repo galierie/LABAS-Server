@@ -89,11 +89,11 @@ async def scan(payload: ScanRequest):
     voter = db.exec(select(Voter).where(Voter.uin == mosip_response["uin"])).first()
     # Don't allow voter if not registered, already voted, or have claimed the ballot in another precint
     if not voter:
-        raise HTTPException(status_code=404, detail="Invalid voter")    
+      raise HTTPException(status_code=404, detail="Invalid voter")    
     elif voter.voted == True:
-        raise HTTPException(status_code=409, detail="Voter has already voted")    
-    elif voter.precinct == None:
-        raise HTTPException(status_code=403, detail=f"Voter already claimed ballot in precinct {voter.precinct}")    
+      raise HTTPException(status_code=409, detail="Voter has already voted")    
+    elif voter.precinct is not None:
+      raise HTTPException(status_code=409, detail=f"Voter already claimed ballot in precinct {voter.precinct}")
 
   
   # If valid voter, write in database the precint they generated the ballot

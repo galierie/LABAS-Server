@@ -2,6 +2,7 @@
 Helper functions for the printing phase.
 """
 
+from datetime import date
 from fastapi import HTTPException
 from pydantic import BaseModel
 from sqlmodel import Session, select, col
@@ -85,9 +86,10 @@ def get_ballot(db: Session, province: str, city: str):
         }))
 
     # Get election info
+    today = date.today()
     election_data = ElectionData.model_validate({
-        "title": "2024 National and Local Elections",
-        "date": "2025-05-12",
+        "title": f"{today.strftime('%Y')} National and Local Elections",
+        "date": today.strftime('%Y-%m-%d'),
         "province": province,
         "city": city,
     })

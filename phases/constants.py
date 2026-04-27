@@ -1,0 +1,24 @@
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.units import mm
+
+PAGE_WIDTH, PAGE_HEIGHT = A4
+PAGE_MARGIN = 15 * mm
+
+N_COLS = 4
+
+BUBBLE_RADIUS = 2.5 * mm
+BUBBLE_SPACING = 2 * mm
+
+MARKER_SIZE = 8 * mm
+MARKER_INSET = 5 * mm
+MARKER_POSITIONS = [
+    (MARKER_INSET, MARKER_INSET),  # bottom left
+    (PAGE_WIDTH - MARKER_SIZE - MARKER_INSET, MARKER_INSET),  # bottom right
+    (MARKER_INSET, PAGE_HEIGHT - MARKER_SIZE - MARKER_INSET),  # top left
+    (PAGE_WIDTH - MARKER_SIZE - MARKER_INSET,
+     PAGE_HEIGHT - MARKER_SIZE - MARKER_INSET)  # top right
+]
+
+TITLE_SPACING = 10 * mm
+
+BALLOT_TITLE = "2028 MOCK ELECTION BALLOT"

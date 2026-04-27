@@ -85,6 +85,13 @@ def get_ballot(db: Session, province: str, city: str):
             "party": candidate.party if candidate.party else "Independent",
         }))
 
+    # Determine candidate order by name. This determines candidate number.
+    def get_candidate_order(candidate: CandidateBallotData):
+        return (candidate.last_name, candidate.first_name, candidate.middle_name)
+
+    for pos_name in ballot:
+        ballot[pos_name].candidates.sort(key=get_candidate_order)
+
     # Get election info
     today = date.today()
     election_data = ElectionData.model_validate({

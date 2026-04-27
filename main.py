@@ -98,8 +98,7 @@ async def scan(payload: ScanRequest):
   
   # If valid voter, write in database the precint they generated the ballot
   # for now, this is hardcoded to 'UP Diliman'
-  precinct = "UP Diliman"
-  voter.precinct = PRECINCT
+  voter.precinct = "UP Diliman"
   db.add(voter)
   db.commit()
   db.refresh(voter)

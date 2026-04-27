@@ -84,25 +84,7 @@ async def scan(payload: ScanRequest):
       status_code=500,
       detail=str(e)
     )
-
-  # Check if the registered voter
-    voter = db.exec(select(Voter).where(Voter.uin == mosip_response["uin"])).first()
-    # Don't allow voter if not registered, already voted, or have claimed the ballot in another precint
-    if not voter:
-      raise HTTPException(status_code=404, detail="Invalid voter")    
-    elif voter.voted == True:
-      raise HTTPException(status_code=409, detail="Voter has already voted")    
-    elif voter.precinct is not None:
-      raise HTTPException(status_code=409, detail=f"Voter already claimed ballot in precinct {voter.precinct}")
-
-  
-  # If valid voter, write in database the precint they generated the ballot
-  # for now, this is hardcoded to 'UP Diliman'
-  voter.precinct = "UP Diliman"
-  db.add(voter)
-  db.commit()
-  db.refresh(voter)
-
+    
   # Assuming everything is a success, display the MOSIP and voter checks on PrecinctOfficer's screen
   response = {
      "uin": mosip_response["uin"],
@@ -160,8 +142,18 @@ async def print_ballot(province: str, city: str, db: Session = Depends(db_init))
     "lp", "-h", f"localhost:{VM_PORT}", "-d", PRINTER
   ], input=pdf_content, capture_output=True, timeout=30)
   if result.returncode == 0:
-      print("Ballot sent to printer successfully.")
-  else:
-      print(f"Error: {result.stderr.decode()}")
+    print("Ballot sent to printer successfully.")
 
-  return {"status": "printed"}
+    voter = db.exec(select(orm.Voter).where(orm.Voter.uin == uin)).first()
+  
+    # If valid voter, write in database the precint they generated the ballot
+    # for now, this is hardcoded to 'UP Diliman'
+    voter.precinct = "UP Diliman"
+    db.add(voter)
+    db.commit()
+    db.refresh(voter)
+
+    return {"status": "printed"}
+  else:
+    print(f"Error: {result.stderr.decode()}")
+    return {"status": "failed"}

@@ -2,7 +2,7 @@
 Helper functions for the printing phase.
 """
 
-from datetime import date
+from datetime import date, datetime
 from fastapi import HTTPException
 from pydantic import BaseModel
 from sqlmodel import Session, select, col
@@ -12,7 +12,7 @@ from functools import partial
 from io import BytesIO
 from math import ceil
 from reportlab.lib import colors
-from reportlab.lib.enums import TA_CENTER, TA_LEFT
+from reportlab.lib.enums import TA_CENTER
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.pdfbase.pdfmetrics import registerFont, registerFontFamily # type: ignore
 from reportlab.pdfbase.ttfonts import TTFont
@@ -240,7 +240,7 @@ class CandidateGrid(Flowable):
             if len(candidate.last_name) == 0 and len(candidate.first_name) == 0:
                 label = f"{idx}. {candidate.party.upper()}"
             else:
-                label = f"{idx}. {candidate.last_name.upper()}, {candidate.first_name.upper()}{f' {candidate.middle_name[0].upper()}' if len(candidate.middle_name) > 0 else ''} ({candidate.party.upper()})"
+                label = f"{idx}. {candidate.last_name.upper()}, {candidate.first_name.upper()}{f' {candidate.middle_name[0].upper()}.' if len(candidate.middle_name) > 0 else ''} ({candidate.party.upper()})"
             candidate_name = Paragraph(label, self.text_style)
 
             text_x = bubble_x + self.bubble_radius + BUBBLE_SPACING
@@ -276,7 +276,8 @@ def init_ballot(canvas: Canvas, doc: BaseDocTemplate, election_data: ElectionDat
     canvas.drawCentredString(PAGE_WIDTH / 2, title_y, election_data.title)
 
     canvas.setFont("NotoSans", 11)
-    canvas.drawCentredString(PAGE_WIDTH / 2, title_y - 5 * mm, election_data.date)
+    election_date = datetime.strptime(election_data.date, '%Y-%m-%d')
+    canvas.drawCentredString(PAGE_WIDTH / 2, title_y - 5 * mm, election_date.strftime('%B %d, %Y'))
     canvas.drawCentredString(PAGE_WIDTH / 2, title_y - 10 * mm, f'{election_data.city}, {election_data.province}')
 
     canvas.restoreState()
@@ -315,9 +316,9 @@ def build_ballot(ballot_data: BallotData) -> bytes:
     instruction_style = ParagraphStyle(
         name="PositionInstruction",
         fontName="NotoSans",
-        fontSize=11,
+        fontSize=8,
         spaceAfter=3,
-        alignment=TA_LEFT,
+        alignment=TA_CENTER,
         textColor=colors.black,
     )
 
@@ -327,7 +328,6 @@ def build_ballot(ballot_data: BallotData) -> bytes:
     for position in ballot_data.positions:
         # title + max_votes
         story.append(Paragraph(position.title.upper(), header_style))
-        story.append(Spacer(1, 2 * mm))
         story.append(Paragraph(f'Vote for {position.max_votes}', instruction_style))
         story.append(Spacer(1, 2 * mm))
 

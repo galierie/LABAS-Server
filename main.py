@@ -136,16 +136,25 @@ PRINTER = "Brother_MFC_T800W"
 
 @app.get("/print-ballot")
 async def print_ballot(province: str, city: str, uin: str, db: Session = Depends(db_init)):
-  ballot_data = printing.get_ballot_data(db=db, province=province, city=city)
-  pdf_content = printing.build_ballot(ballot_data=ballot_data, uin=uin, db=db)
+  try:
+    ballot_data = printing.get_ballot_data(db=db, province=province, city=city)
+    pdf_content = printing.build_ballot(ballot_data=ballot_data, uin=uin, db=db)
 
+    # Get voter for later
+    voter = db.exec(select(orm.Voter).where(orm.Voter.uin == uin)).first()
+    if voter is None:
+      raise HTTPException(status_code=404, detail="Invalid voter")
+  
+  except Exception:
+    # Display error on PrecinctOfficer's screen
+    return {"status": "failed"}
+
+  # Print before modifying anything to voter data
   result = subprocess.run([
     "lp", "-h", f"localhost:{VM_PORT}", "-d", PRINTER
   ], input=pdf_content, capture_output=True, timeout=30)
   if result.returncode == 0:
     print("Ballot sent to printer successfully.")
-
-    voter = db.exec(select(orm.Voter).where(orm.Voter.uin == uin)).first()
   
     # If valid voter, write in database the precint they generated the ballot
     # for now, this is hardcoded to 'UP Diliman'

@@ -158,8 +158,8 @@ async def print_ballot(province: str, city: str, db: Session = Depends(db_init))
   pdf_content = printing.build_ballot(ballot_data=ballot_data)
 
   result = subprocess.run([
-    "lpr", "-H", f"localhost:{VM_PORT}", "-P", PRINTER
-  ], input=pdf_content, capture_output=True)
+    "lp", "-h", f"localhost:{VM_PORT}", "-d", PRINTER
+  ], input=pdf_content, capture_output=True, timeout=30)
   if result.returncode == 0:
       print("Ballot sent to printer successfully.")
   else:

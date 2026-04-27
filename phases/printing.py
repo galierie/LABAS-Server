@@ -1,7 +1,36 @@
+"""
+Helper functions for the printing phase.
+"""
+
 from fastapi import HTTPException
+from pydantic import BaseModel
 from sqlmodel import Session, select, col
 
 from orm import Province, City, Candidate, Position, Scope
+
+class CandidateBallotData(BaseModel):
+    id: int
+    first_name: str
+    last_name: str
+    middle_name: str
+    party: str
+
+class PositionBallotData(BaseModel):
+    position_id: int
+    title: str
+    max_votes: int
+    scope: str
+    candidates: list[CandidateBallotData]
+
+class ElectionData(BaseModel):
+    title: str
+    date: str
+    province: str
+    city: str
+
+class BallotData(BaseModel):
+    election: ElectionData
+    positions: list[PositionBallotData]
 
 def get_ballot(db: Session, province: str, city: str):
     # Retrieve the province and city ids based on their names
@@ -30,42 +59,37 @@ def get_ballot(db: Session, province: str, city: str):
             ((Scope.scope_id == 2) & (Candidate.province_id == provID)) |
             ((Scope.scope_id == 3) & (Candidate.city_id == cityID))
         )
-        .order_by(Scope.scope_id, Position.position_id, Candidate.candidate_number)
+        .order_by(Scope.scope_id, Position.position_id, Candidate.last_name, Candidate.first_name, Candidate.middle_name)
     ).all()
 
     # Group by position
-    ballot = {}
+    ballot: dict[str, PositionBallotData] = dict()
     for candidate, position, scope in results:
         pos_name = position.position_name
         if pos_name not in ballot:
-            ballot[pos_name] = {
+            temp_candidates: list[CandidateBallotData] = []
+            ballot[pos_name] = PositionBallotData.model_validate({
                 "position_id": position.position_id,
                 "title": position.position_name,
-                "vote_for": position.max_votes,
+                "max_votes": position.max_votes,
                 "scope": scope.scope_name,
-                # Some fields from dale's sample ballot, can be changed later
-                "instruction_en": f"Vote for {position.max_votes}",
-                "instruction_tl": f"Bumoto ng hindi hihigit sa {position.max_votes}",
-                "candidates": [],
-            }
-        ballot[pos_name]["candidates"].append({
-            # TODO: add candidate number and party later
+                "candidates": temp_candidates,
+            })
+        ballot[pos_name].candidates.append(CandidateBallotData.model_validate({
+            # TODO: add party later
             "id": candidate.candidate_id,
-            "name": candidate.candidate_name,
-            "number": candidate.candidate_number,
+            "first_name": candidate.first_name,
+            "last_name": candidate.last_name,
+            "middle_name": candidate.middle_name,
             "party": candidate.party if candidate.party else "Independent",
-        })
+        }))
 
-    return {
-        "election": {
-            "title": "2024 National and Local Elections",
-            "date": "2025-05-12",
-            # We don't have a way to determine the voter's precinct, so we'll just hardcode it for now.
-            # "precinct_id": "90020001",
-            # "precinct_cluster": "0077A",
-            "province": province,
-            "city": city,
+    # Get election info
+    election_data = ElectionData.model_validate({
+        "title": "2024 National and Local Elections",
+        "date": "2025-05-12",
+        "province": province,
+        "city": city,
+    })
 
-        },
-        "positions": list(ballot.values()),
-    }
+    return BallotData(election=election_data, positions=list(ballot.values()))

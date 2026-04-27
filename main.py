@@ -86,7 +86,7 @@ async def scan(payload: ScanRequest):
     )
 
   # Check if the registered voter
-    voter = db.exec(select(Voter.uin, Voter.precinct, Voter.voted).where((Voter.uin == mosip_response["uin"]))).first()
+    voter = db.exec(select(Voter).where(Voter.uin == mosip_response["uin"])).first()
     # Don't allow voter if not registered, already voted, or have claimed the ballot in another precint
     if not voter:
         raise HTTPException(status_code=404, detail="Invalid voter")    

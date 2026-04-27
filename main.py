@@ -6,6 +6,7 @@ from sqlmodel import Session, create_engine, select, col, text
 import orm
 from dotenv import load_dotenv
 import os
+from fastapi.middleware.cors import CORSMiddleware
 
 from phases import printing
 
@@ -15,6 +16,15 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 engine = create_engine(DATABASE_URL)
 
 app = FastAPI()
+
+# Allow CORS for local development. This allows the webapp running on localhost to make a GET request to the server
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # for dev only — see below for prod
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Helper function for getting session
 def db_init():
@@ -119,13 +129,21 @@ NOTES for /ballot:
 # Once received, the server will send back the ballot data for that voter's city and province.
 # City and province names must match exactly what's in the database for now. 
 # Maybe we can have a better way to handle inconsistent names later e.g. Manila City vs. Manila vs. City of Manila 
+import subprocess
+VM_PORT = "6310"
+PRINTER = "Brother_MFC_T800W"
+
 @app.get("/print-ballot")
 async def print_ballot(province: str, city: str, db: Session = Depends(db_init)):
-    ballot_data = printing.get_ballot_data(db=db, province=province, city=city)
-    pdf_content = printing.build_ballot(ballot_data=ballot_data)
+  ballot_data = printing.get_ballot_data(db=db, province=province, city=city)
+  pdf_content = printing.build_ballot(ballot_data=ballot_data)
 
-    return Response(
-        content=pdf_content,
-        media_type='application/pdf',
-        headers={"Content-Disposition": "attachment; filename=ballot.pdf"}
-    )
+  result = subprocess.run([
+    "lpr", "-H", f"localhost:{VM_PORT}", "-P", PRINTER
+  ], input=pdf_content, capture_output=True)
+  if result.returncode == 0:
+      print("Ballot sent to printer successfully.")
+  else:
+      print(f"Error: {result.stderr.decode()}")
+
+  return {"status": "printed"}

@@ -33,7 +33,7 @@ class BallotData(BaseModel):
     election: ElectionData
     positions: list[PositionBallotData]
 
-def get_ballot(db: Session, province: str, city: str):
+def get_ballot_data(db: Session, province: str, city: str):
     # Retrieve the province and city ids based on their names
     provID = db.exec(
         select(Province.province_id).where(col(Province.province_name).ilike(province))

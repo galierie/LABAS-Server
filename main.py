@@ -121,4 +121,4 @@ NOTES for /ballot:
 # Maybe we can have a better way to handle inconsistent names later e.g. Manila City vs. Manila vs. City of Manila 
 @app.get("/ballot")
 async def print_ballot(province: str, city: str, db: Session = Depends(db_init)):
-    return printing.get_ballot(db=db, province=province, city=city)
+    return printing.get_ballot_data(db=db, province=province, city=city)

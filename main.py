@@ -14,6 +14,8 @@ from phases import printing
 # Setup db stuff
 load_dotenv()
 DATABASE_URL = os.getenv("DATABASE_URL")
+if DATABASE_URL is None:
+  raise HTTPException(status_code=500, detail="Missing database URL.")
 engine = create_engine(DATABASE_URL)
 
 app = FastAPI()

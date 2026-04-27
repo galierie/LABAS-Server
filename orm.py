@@ -35,9 +35,11 @@ class City(SQLModel, table=True):
 class Candidate(SQLModel, table=True):
     __tablename__ = "candidates"
     candidate_id: int = Field(primary_key=True)
-    candidate_name: str
+    # Name and position determines candidate number
+    first_name: str
+    last_name: str
+    middle_name: str
     party: str | None = None
-    candidate_number: int
     position_id: int = Field(foreign_key="position.position_id")
     province_id: Optional[str] = Field(default=None, foreign_key="provinces.province_id")
     city_id: Optional[str] = Field(default=None, foreign_key="cities.city_id")

@@ -119,6 +119,6 @@ NOTES for /ballot:
 # Once received, the server will send back the ballot data for that voter's city and province.
 # City and province names must match exactly what's in the database for now. 
 # Maybe we can have a better way to handle inconsistent names later e.g. Manila City vs. Manila vs. City of Manila 
-@app.get("/ballot")
+@app.get("/print-ballot")
 async def print_ballot(province: str, city: str, db: Session = Depends(db_init)):
     return printing.get_ballot_data(db=db, province=province, city=city)

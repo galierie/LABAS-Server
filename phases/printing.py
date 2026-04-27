@@ -29,7 +29,7 @@ from reportlab.platypus import (
 from orm import Province, City, Candidate, Position, Scope
 
 
-from constants import (
+from phases.print_constants import (
     A4,
     PAGE_MARGIN,
     PAGE_WIDTH,

@@ -41,4 +41,3 @@ class Candidate(SQLModel, table=True):
     position_id: int = Field(foreign_key="position.position_id")
     province_id: Optional[str] = Field(default=None, foreign_key="provinces.province_id")
     city_id: Optional[str] = Field(default=None, foreign_key="cities.city_id")
-    barangay_id: Optional[str] = Field(default=None, foreign_key="barangays.barangay_id")

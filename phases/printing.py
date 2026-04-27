@@ -9,6 +9,7 @@ from sqlmodel import Session, select, col
 
 
 from functools import partial
+from io import BytesIO
 from math import ceil
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
@@ -280,7 +281,7 @@ def init_ballot(canvas: Canvas, doc: BaseDocTemplate, election_data: ElectionDat
 
     canvas.restoreState()
 
-def build_ballot(ballot_data: BallotData) -> str:
+def build_ballot(ballot_data: BallotData) -> bytes:
     # Make the page frame
     frame = Frame(
         PAGE_MARGIN,
@@ -291,8 +292,11 @@ def build_ballot(ballot_data: BallotData) -> str:
         id="main",
     )
 
+    # Save to IO buffer, not to disk, to enable return from API route
+    buffer = BytesIO()
+    doc = BaseDocTemplate(buffer, pagesize=A4)
+
     init_ballot_with_election_data = partial(init_ballot, election_data=ballot_data.election)
-    doc = BaseDocTemplate(PDF_PATH, pagesize=A4)
     doc.addPageTemplates([
         PageTemplate(id="ballot", frames=[frame], onPage=init_ballot_with_election_data),
     ])
@@ -333,5 +337,9 @@ def build_ballot(ballot_data: BallotData) -> str:
 
     doc.build(story)
 
+    # Get content
+    pdf_content = buffer.getvalue()
+    buffer.close()
+
     print(bubble_coords)
-    return PDF_PATH
+    return pdf_content

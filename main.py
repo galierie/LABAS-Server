@@ -1,4 +1,4 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Depends
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Depends, Response
 from pydantic import BaseModel
 from typing import Dict
 from kyc_auth import kyc_auth
@@ -121,4 +121,11 @@ NOTES for /ballot:
 # Maybe we can have a better way to handle inconsistent names later e.g. Manila City vs. Manila vs. City of Manila 
 @app.get("/print-ballot")
 async def print_ballot(province: str, city: str, db: Session = Depends(db_init)):
-    return printing.get_ballot_data(db=db, province=province, city=city)
+    ballot_data = printing.get_ballot_data(db=db, province=province, city=city)
+    pdf_content = printing.build_ballot(ballot_data=ballot_data)
+
+    return Response(
+        content=pdf_content,
+        media_type='application/pdf',
+        headers={"Content-Disposition": "attachment; filename=ballot.pdf"}
+    )

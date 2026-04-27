@@ -14,6 +14,11 @@ engine = create_engine(DATABASE_URL)
 
 app = FastAPI()
 
+# Helper function for getting session
+def db_init():
+  with Session(engine) as session:
+    yield session
+
 # device_id -> WebSocket of precinctOfficer.
 precinct_officer: Dict[str, WebSocket] = {}
 

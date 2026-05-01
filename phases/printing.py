@@ -27,7 +27,7 @@ from reportlab.platypus import (
 )
 
 
-from orm import Province, City, Candidate, Position, Scope
+from orm import Province, City, Candidate, Position, Scope, Bubble_Coordinate
 
 
 from phases.print_constants import (
@@ -45,7 +45,7 @@ from phases.print_constants import (
 )
 PDF_PATH = 'ballot.pdf'
 
-
+from pprint import pprint
 
 # Getting Ballot Data
 
@@ -166,6 +166,22 @@ class BubbleCoords(CandidateBallotData):
     bubble_y_pt: float
     page: int
 
+# Helper function to store UIN's ballot's bubble coordinates
+def save_bubble_coordinates(bubble_coords: list[BubbleCoords], uin: str, db: Session):
+    orm_bubble_coords: list[Bubble_Coordinate] = [
+        Bubble_Coordinate(
+            uin=uin,
+            candidate_id=b.id,
+            bubble_x_pt=b.bubble_x_pt,
+            bubble_y_pt=b.bubble_y_pt,
+            page=b.page
+        )
+        for b in bubble_coords
+    ]
+
+    db.add_all(orm_bubble_coords)
+    db.commit()
+
 class CandidateGrid(Flowable):
     def __init__(
         self,
@@ -282,7 +298,7 @@ def init_ballot(canvas: Canvas, doc: BaseDocTemplate, election_data: ElectionDat
 
     canvas.restoreState()
 
-def build_ballot(ballot_data: BallotData) -> bytes:
+def build_ballot(ballot_data: BallotData, uin: str, db: Session) -> bytes:
     # Make the page frame
     frame = Frame(
         PAGE_MARGIN,
@@ -341,5 +357,10 @@ def build_ballot(ballot_data: BallotData) -> bytes:
     pdf_content = buffer.getvalue()
     buffer.close()
 
-    print(bubble_coords)
+    # print("Bubble Coords:")
+    # pprint(bubble_coords)
+
+    # Save bubble_cords into database so we could retrive them given a UIN in /get-ballot-template.
+    save_bubble_coordinates(bubble_coords, uin, db)
+
     return pdf_content

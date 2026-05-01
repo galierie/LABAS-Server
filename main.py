@@ -184,10 +184,26 @@ class TallyRequest(BaseModel):
 # This API is used to add a voter's votes into the tally count.
 # This will also delete the voter's entries in the bubble_coordinates table.
 @app.post("/tally")
-async def get_ballot_template(request: TallyRequest, db: Session = Depends(db_init)):
+async def tally(request: TallyRequest, db: Session = Depends(db_init)):
   # Consider this as one transaction
   with db.begin():
     
+    # Raise an error if voter has already voted.
+    voter: orm.Voter = db.exec(
+      select(orm.Voter)
+      .where(orm.Voter.uin == request.uin)
+    )
+    if not voter:
+      raise HTTPException(
+        status_code=400,
+        detail="UIN does not correspond to a registered voter."
+      )
+    if voter.voted:
+      raise HTTPException(
+        status_code=400,
+        detail="Voter has already voted."
+      )
+
     # Increment votecounts
     for candidate_id in request.candidate_ids:
       db.exec(

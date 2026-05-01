@@ -1,6 +1,7 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Depends, Response
 from pydantic import BaseModel
 from typing import Dict
+from collections import defaultdict
 from kyc_auth import kyc_auth
 from sqlmodel import Session, create_engine, select, col, text, update, delete
 import orm
@@ -204,13 +205,32 @@ async def tally(request: TallyRequest, db: Session = Depends(db_init)):
         detail="Voter has already voted."
       )
 
-    # Increment votecounts
-    for candidate_id in request.candidate_ids:
-      db.exec(
-        update(orm.Tally)
-        .where(orm.Tally.candidate_id == candidate_id)
-        .values(votecount=orm.Tally.votecount + 1)
-      )
+    # Make sure votes per position do not exceed position.max_votes.
+    # If exceeding, do not incremement tally for that position.
+    candidates: list[orm.Candidate] = db.exec(
+      select(orm.Candidate)
+      .where(orm.Candidate.candidate_id.in_(request.candidate_ids))
+    ).all()
+    position_candidates: dict[int, list[int]]= defaultdict(list) # position_id -> [candidate_id]
+    for c in candidates:
+      position_candidates[c.position_id].append(c.candidate_id)
+    positions: list[orm.Position] = db.exec(
+      select(orm.Position)
+    ).all()
+    position_map: dict[int, orm.Position] = {p.position_id: p for p in positions}
+    valid_candidate_ids: list[int] = []
+    invalid_positions: list[str] = []
+    for pid, cids in position_candidates.items():
+      position = position_map[pid]
+      if len(cids) <= position.max_votes:
+        valid_candidate_ids.extend(cids)
+      else:
+        invalid_positions.append(position.position_name)
+    db.exec(
+      update(orm.Tally)
+      .where(orm.Tally.candidate_id.in_(valid_candidate_ids))
+      .values(votecount=orm.Tally.votecount+1)
+    )
 
     # Delete bubble_coordinates entries of voter
     db.exec(
@@ -225,5 +245,8 @@ async def tally(request: TallyRequest, db: Session = Depends(db_init)):
       .values(voted=True)
     )
   
-  return {"status": "added to tally"}
+  if invalid_positions:
+    return {"status": f"Too many votes on: {', '.join(invalid_positions)}. Incremented tally for proper votes."}
+  else:
+    return {"status": "Added all votes to the tally."}
     

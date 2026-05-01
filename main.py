@@ -186,64 +186,62 @@ class TallyRequest(BaseModel):
 # This will also delete the voter's entries in the bubble_coordinates table.
 @app.post("/tally")
 async def tally(request: TallyRequest, db: Session = Depends(db_init)):
-  # Consider this as one transaction
-  with db.begin():
     
-    # Raise an error if voter has already voted.
-    voter: orm.Voter = db.exec(
-      select(orm.Voter)
-      .where(orm.Voter.uin == request.uin)
-    ).first()
-    if not voter:
-      raise HTTPException(
-        status_code=400,
-        detail="UIN does not correspond to a registered voter."
-      )
-    if voter.voted:
-      raise HTTPException(
-        status_code=400,
-        detail="Voter has already voted."
-      )
-
-    # Make sure votes per position do not exceed position.max_votes.
-    # If exceeding, do not incremement tally for that position.
-    candidates: list[orm.Candidate] = db.exec(
-      select(orm.Candidate)
-      .where(orm.Candidate.candidate_id.in_(request.candidate_ids))
-    ).all()
-    position_candidates: dict[int, list[int]]= defaultdict(list) # position_id -> [candidate_id]
-    for c in candidates:
-      position_candidates[c.position_id].append(c.candidate_id)
-    positions: list[orm.Position] = db.exec(
-      select(orm.Position)
-    ).all()
-    position_map: dict[int, orm.Position] = {p.position_id: p for p in positions}
-    valid_candidate_ids: list[int] = []
-    invalid_positions: list[str] = []
-    for pid, cids in position_candidates.items():
-      position = position_map[pid]
-      if len(cids) <= position.max_votes:
-        valid_candidate_ids.extend(cids)
-      else:
-        invalid_positions.append(position.position_name)
-    db.exec(
-      update(orm.Tally)
-      .where(orm.Tally.candidate_id.in_(valid_candidate_ids))
-      .values(votecount=orm.Tally.votecount+1)
+  # Raise an error if voter has already voted.
+  voter: orm.Voter = db.exec(
+    select(orm.Voter)
+    .where(orm.Voter.uin == request.uin)
+  ).first()
+  if not voter:
+    raise HTTPException(
+      status_code=400,
+      detail="UIN does not correspond to a registered voter."
+    )
+  if voter.voted:
+    raise HTTPException(
+      status_code=400,
+      detail="Voter has already voted."
     )
 
-    # Delete bubble_coordinates entries of voter
-    db.exec(
-      delete(orm.Bubble_Coordinate)
-      .where(orm.Bubble_Coordinate.uin == request.uin)
-    )
-  
-    # Mark voter as voted.
-    db.exec(
-      update(orm.Voter)
-      .where(orm.Voter.uin == request.uin)
-      .values(voted=True)
-    )
+  # Make sure votes per position do not exceed position.max_votes.
+  # If exceeding, do not incremement tally for that position.
+  candidates: list[orm.Candidate] = db.exec(
+    select(orm.Candidate)
+    .where(orm.Candidate.candidate_id.in_(request.candidate_ids))
+  ).all()
+  position_candidates: dict[int, list[int]]= defaultdict(list) # position_id -> [candidate_id]
+  for c in candidates:
+    position_candidates[c.position_id].append(c.candidate_id)
+  positions: list[orm.Position] = db.exec(
+    select(orm.Position)
+  ).all()
+  position_map: dict[int, orm.Position] = {p.position_id: p for p in positions}
+  valid_candidate_ids: list[int] = []
+  invalid_positions: list[str] = []
+  for pid, cids in position_candidates.items():
+    position = position_map[pid]
+    if len(cids) <= position.max_votes:
+      valid_candidate_ids.extend(cids)
+    else:
+      invalid_positions.append(position.position_name)
+  db.exec(
+    update(orm.Tally)
+    .where(orm.Tally.candidate_id.in_(valid_candidate_ids))
+    .values(votecount=orm.Tally.votecount+1)
+  )
+
+  # Delete bubble_coordinates entries of voter
+  db.exec(
+    delete(orm.Bubble_Coordinate)
+    .where(orm.Bubble_Coordinate.uin == request.uin)
+  )
+
+  # Mark voter as voted.
+  db.exec(
+    update(orm.Voter)
+    .where(orm.Voter.uin == request.uin)
+    .values(voted=True)
+  )
   
   if invalid_positions:
     return {"status": f"Too many votes on: {', '.join(invalid_positions)}. Incremented tally for proper votes."}

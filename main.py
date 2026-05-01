@@ -243,6 +243,8 @@ async def tally(request: TallyRequest, db: Session = Depends(db_init)):
     .values(voted=True)
   )
   
+  db.commit()
+  
   if invalid_positions:
     return {"status": f"Too many votes on: {', '.join(invalid_positions)}. Incremented tally for proper votes."}
   else:

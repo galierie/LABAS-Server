@@ -218,5 +218,12 @@ async def tally(request: TallyRequest, db: Session = Depends(db_init)):
       .where(orm.Bubble_Coordinate.uin == request.uin)
     )
   
+    # Mark voter as voted.
+    db.exec(
+      update(orm.Voter)
+      .where(orm.Voter.uin == request.uin)
+      .values(voted=True)
+    )
+  
   return {"status": "added to tally"}
     

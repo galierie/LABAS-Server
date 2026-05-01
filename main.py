@@ -1,8 +1,9 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Depends, Response
 from pydantic import BaseModel
 from typing import Dict
+from collections import defaultdict
 from kyc_auth import kyc_auth
-from sqlmodel import Session, create_engine, select, col, text
+from sqlmodel import Session, create_engine, select, col, text, update, delete
 import orm
 from dotenv import load_dotenv
 import os
@@ -136,7 +137,7 @@ PRINTER = "Brother_MFC_T800W"
 @app.get("/print-ballot")
 async def print_ballot(province: str, city: str, uin: str, db: Session = Depends(db_init)):
   ballot_data = printing.get_ballot_data(db=db, province=province, city=city)
-  pdf_content = printing.build_ballot(ballot_data=ballot_data)
+  pdf_content = printing.build_ballot(ballot_data=ballot_data, uin=uin, db=db)
 
   result = subprocess.run([
     "lp", "-h", f"localhost:{VM_PORT}", "-d", PRINTER
@@ -157,3 +158,93 @@ async def print_ballot(province: str, city: str, uin: str, db: Session = Depends
   else:
     print(f"Error: {result.stderr.decode()}")
     return {"status": "failed"}
+
+# Given a UIN of a voter, return the candidate-coordinate mapping of his ballot.
+# This is called by PrecinctOfficer.
+@app.get("/get-ballot-template")
+async def get_ballot_template(uin: str, db: Session = Depends(db_init)):
+  ballot_coordinates: list[orm.Bubble_Coordinate] = db.exec(
+    select(orm.Bubble_Coordinate)
+    .where(orm.Bubble_Coordinate.uin == uin)
+  ).all()
+
+  return [
+    {
+      "candidate_id": row.candidate_id,
+      "bubble_x_pt": row.bubble_x_pt,
+      "bubble_y_pt": row.bubble_y_pt,
+      "page": row.page
+    }
+    for row in ballot_coordinates
+  ]
+
+class TallyRequest(BaseModel):
+  uin: str
+  candidate_ids: list[int]
+
+# This API is used to add a voter's votes into the tally count.
+# This will also delete the voter's entries in the bubble_coordinates table.
+@app.post("/tally")
+async def tally(request: TallyRequest, db: Session = Depends(db_init)):
+    
+  # Raise an error if voter has already voted.
+  voter: orm.Voter = db.exec(
+    select(orm.Voter)
+    .where(orm.Voter.uin == request.uin)
+  ).first()
+  if not voter:
+    raise HTTPException(
+      status_code=400,
+      detail="UIN does not correspond to a registered voter."
+    )
+  if voter.voted:
+    raise HTTPException(
+      status_code=400,
+      detail="Voter has already voted."
+    )
+
+  # Make sure votes per position do not exceed position.max_votes.
+  # If exceeding, do not incremement tally for that position.
+  candidates: list[orm.Candidate] = db.exec(
+    select(orm.Candidate)
+    .where(orm.Candidate.candidate_id.in_(request.candidate_ids))
+  ).all()
+  position_candidates: dict[int, list[int]]= defaultdict(list) # position_id -> [candidate_id]
+  for c in candidates:
+    position_candidates[c.position_id].append(c.candidate_id)
+  positions: list[orm.Position] = db.exec(
+    select(orm.Position)
+  ).all()
+  position_map: dict[int, orm.Position] = {p.position_id: p for p in positions}
+  valid_candidate_ids: list[int] = []
+  invalid_positions: list[str] = []
+  for pid, cids in position_candidates.items():
+    position = position_map[pid]
+    if len(cids) <= position.max_votes:
+      valid_candidate_ids.extend(cids)
+    else:
+      invalid_positions.append(position.position_name)
+  db.exec(
+    update(orm.Tally)
+    .where(orm.Tally.candidate_id.in_(valid_candidate_ids))
+    .values(votecount=orm.Tally.votecount+1)
+  )
+
+  # Delete bubble_coordinates entries of voter
+  db.exec(
+    delete(orm.Bubble_Coordinate)
+    .where(orm.Bubble_Coordinate.uin == request.uin)
+  )
+
+  # Mark voter as voted.
+  db.exec(
+    update(orm.Voter)
+    .where(orm.Voter.uin == request.uin)
+    .values(voted=True)
+  )
+  
+  if invalid_positions:
+    return {"status": f"Too many votes on: {', '.join(invalid_positions)}. Incremented tally for proper votes."}
+  else:
+    return {"status": "Added all votes to the tally."}
+    

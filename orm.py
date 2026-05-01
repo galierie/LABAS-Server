@@ -43,3 +43,17 @@ class Candidate(SQLModel, table=True):
     position_id: int = Field(foreign_key="position.position_id")
     province_id: Optional[str] = Field(default=None, foreign_key="provinces.province_id")
     city_id: Optional[str] = Field(default=None, foreign_key="cities.city_id")
+
+class Bubble_Coordinate(SQLModel, table=True):
+    __tablename__ = "bubble_coordinates"
+    bubble_id: int = Field(primary_key=True)
+    uin: str = Field(foreign_key="voters.uin")
+    candidate_id: int = Field(foreign_key="candidates.candidate_id")
+    bubble_x_pt: float = Field(nullable=False)
+    bubble_y_pt: float = Field(nullable=False)
+    page: int = Field(nullable=False)
+
+class Tally(SQLModel, table=True):
+    __tablename__ = "tally"
+    candidate_id: int = Field(primary_key=True, foreign_key="candidates.candidate_id")
+    votecount: int = Field(nullable=False)

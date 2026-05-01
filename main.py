@@ -192,7 +192,7 @@ async def tally(request: TallyRequest, db: Session = Depends(db_init)):
     voter: orm.Voter = db.exec(
       select(orm.Voter)
       .where(orm.Voter.uin == request.uin)
-    )
+    ).first()
     if not voter:
       raise HTTPException(
         status_code=400,

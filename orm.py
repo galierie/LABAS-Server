@@ -52,3 +52,8 @@ class Bubble_Coordinate(SQLModel, table=True):
     bubble_x_pt: float = Field(nullable=False)
     bubble_y_pt: float = Field(nullable=False)
     page: int = Field(nullable=False)
+
+class Tally(SQLModel, table=True):
+    __tablename__ = "tally"
+    candidate_id: int = Field(primary_key=True, foreign_key="candidates.candidate_id")
+    votecount: int = Field(nullable=False)

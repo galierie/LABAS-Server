@@ -2,7 +2,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Depe
 from pydantic import BaseModel
 from typing import Dict
 from kyc_auth import kyc_auth
-from sqlmodel import Session, create_engine, select, col, text
+from sqlmodel import Session, create_engine, select, col, text, update, delete
 import orm
 from dotenv import load_dotenv
 import os
@@ -176,3 +176,31 @@ async def get_ballot_template(uin: str, db: Session = Depends(db_init)):
     }
     for row in ballot_coordinates
   ]
+
+class TallyRequest(BaseModel):
+  uin: str
+  candidate_ids: list[int]
+
+# This API is used to add a voter's votes into the tally count.
+# This will also delete the voter's entries in the bubble_coordinates table.
+@app.post("/tally")
+async def get_ballot_template(request: TallyRequest, db: Session = Depends(db_init)):
+  # Consider this as one transaction
+  with db.begin():
+    
+    # Increment votecounts
+    for candidate_id in request.candidate_ids:
+      db.exec(
+        update(orm.Tally)
+        .where(orm.Tally.candidate_id == candidate_id)
+        .values(votecount=orm.Tally.votecount + 1)
+      )
+
+    # Delete bubble_coordinates entries of voter
+    db.exec(
+      delete(orm.Bubble_Coordinate)
+      .where(orm.Bubble_Coordinate.uin == request.uin)
+    )
+  
+  return {"status": "added to tally"}
+    

@@ -157,3 +157,22 @@ async def print_ballot(province: str, city: str, uin: str, db: Session = Depends
   else:
     print(f"Error: {result.stderr.decode()}")
     return {"status": "failed"}
+
+# Given a UIN of a voter, return the candidate-coordinate mapping of his ballot.
+# This is called by PrecinctOfficer.
+@app.get("/get-ballot-template")
+async def get_ballot_template(uin: str, db: Session = Depends(db_init)):
+  ballot_coordinates: list[orm.Bubble_Coordinate] = db.exec(
+    select(orm.Bubble_Coordinate)
+    .where(orm.Bubble_Coordinate.uin == uin)
+  ).all()
+
+  return [
+    {
+      "candidate_id": row.candidate_id,
+      "bubble_x_pt": row.bubble_x_pt,
+      "bubble_y_pt": row.bubble_y_pt,
+      "page": row.page
+    }
+    for row in ballot_coordinates
+  ]

@@ -68,8 +68,8 @@ async def scan(payload: ScanRequest):
     # Perform crosschecks with Cast Voter Database
     # Also send results to PrecinctOfficer
     with Session(engine) as session:
-      voter: orm.Voter = session.exec(
-        select(orm.Voter.uin, orm.Voter.precinct, orm.Voter.voted)
+      voter = session.exec(
+        select(orm.Voter)
         .where(orm.Voter.uin == uin)
       ).first()
       if voter is None:

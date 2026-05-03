@@ -1,7 +1,8 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Depends, Response
 from pydantic import BaseModel
-from typing import Dict
+from typing import Any, Dict, Optional
 from collections import defaultdict
+from enum import Enum
 from kyc_auth import kyc_auth
 from sqlmodel import Session, create_engine, select, col, text, update, delete, func
 import orm
@@ -281,3 +282,92 @@ async def tally(request: TallyRequest, db: Session = Depends(db_init)):
   else:
     return {"status": "Added all votes to the tally."}
     
+
+class Component(str, Enum):
+  PHONE = "phone"
+  PC = "pc"
+class MessageType(str, Enum):
+  UIN = "uin"
+  IMAGE = "image"
+  CANDIDATES = "candidates display"
+  ACK = "ack"
+  ERROR = "error"
+class CandidateDisplay(BaseModel):
+  candidate_id: int
+  first_name: str
+  middle_name: Optional[str]
+  last_name: str
+class Message(BaseModel):
+  type: MessageType
+  payload: Any
+
+# This WebSocket is to be used by  
+devices: Dict[str, Dict[Component, WebSocket]] = {} # device_id -> {Component -> WebSocket}
+device_to_voter: Dict[str, str] = {} # device_id -> voter uin
+@app.websocket("/submit-ballot/{device_id}/{component}")
+async def submit_ballot(websocket: WebSocket, device_id: str, component: Component):
+  await websocket.accept()
+
+  if device_id not in devices:
+    devices[device_id] = {}
+  devices[device_id][component] = websocket
+
+  try:
+    while True:
+      raw = await websocket.receive_json()
+      msg = Message(**raw)
+      
+      # PrecinctOfficer PC sends voter UIN to server. Server associates it to device_id 
+      if component == Component.PC:
+        if msg.type == MessageType.UIN:
+          uin = msg.payload
+          device_to_voter[device_id] = uin
+
+          await websocket.send_json(Message(
+            type=MessageType.ACK,
+            payload=f"PrecinctOfficer PC {device_id} connected to server."
+          ).model_dump())
+
+      # PrecinctOfficer Phone sends ballot img bytes to server.
+      # Server processes img via OMR, with respect to voter's ballot template
+      # Server sends voted candidates list to corresponding PC      
+      elif component == Component.PHONE:
+        if msg.type == MessageType.IMAGE:
+          
+          # Make sure that corresponding PrecinctOfficer PC has connected first.
+          if device_id not in devices or Component.PC not in devices[device_id] or device_id not in device_to_voter:
+            await websocket.send_json(Message(
+              type=MessageType.ERROR,
+              payload="PrecinctOfficer PC {device_id} not yet connected to server. Please scan again once it is connected."
+            ).model_dump())
+            continue
+          
+          img_bytestring: str = msg.payload
+          uin = device_to_voter[device_id]
+
+          # TODO: Process the scanned ballot
+          # Given the voter's uin, get ballot template
+          # Use OMR given the image bytes and ballot template. This gives list of voted candidates.
+
+          # Voted Candidates list is hardcoded for now
+          voted_candidates_list: list[CandidateDisplay] = [
+            CandidateDisplay(
+              candidate_id=1,
+              first_name="President",
+              middle_name="1",
+              last_name="Candidate"
+            )
+          ]
+
+          pc_websocket = devices[device_id][Component.PC]
+          await pc_websocket.send_json(Message(
+            type=MessageType.CANDIDATES,
+            payload=[voted_candidate.model_dump() for voted_candidate in voted_candidates_list]
+          ).model_dump())
+
+  except WebSocketDisconnect:
+    if device_id in devices and component in devices[device_id]:
+      del devices[device_id][component]
+    if device_id in devices and not devices[device_id]:
+      devices.pop(device_id, None)
+      device_to_voter.pop(device_id, None)

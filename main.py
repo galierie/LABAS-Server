@@ -191,25 +191,6 @@ async def print_ballot(province: str, city: str, uin: str, db: Session = Depends
     print(f"Error: {result.stderr.decode()}")
     return {"status": "failed"}
 
-# Given a UIN of a voter, return the candidate-coordinate mapping of his ballot.
-# This is called by PrecinctOfficer.
-@app.get("/get-ballot-template")
-async def get_ballot_template(uin: str, db: Session = Depends(db_init)):
-  ballot_coordinates: list[orm.Bubble_Coordinate] = db.exec(
-    select(orm.Bubble_Coordinate)
-    .where(orm.Bubble_Coordinate.uin == uin)
-  ).all()
-
-  return [
-    {
-      "candidate_id": row.candidate_id,
-      "bubble_x_pt": row.bubble_x_pt,
-      "bubble_y_pt": row.bubble_y_pt,
-      "page": row.page
-    }
-    for row in ballot_coordinates
-  ]
-
 class TallyRequest(BaseModel):
   uin: str
   candidate_ids: list[int]
@@ -307,7 +288,7 @@ class Message(BaseModel):
 devices: Dict[str, Dict[Component, WebSocket]] = {} # device_id -> {Component -> WebSocket}
 device_to_voter: Dict[str, str] = {} # device_id -> voter uin
 @app.websocket("/submit-ballot/{device_id}/{component}")
-async def submit_ballot(websocket: WebSocket, device_id: str, component: Component):
+async def submit_ballot(websocket: WebSocket, device_id: str, component: Component, db: Session = Depends(db_init)):
   await websocket.accept()
 
   if device_id not in devices:
@@ -346,9 +327,9 @@ async def submit_ballot(websocket: WebSocket, device_id: str, component: Compone
           
           img_bytestring: str = msg.payload
           uin = device_to_voter[device_id]
+          ballot_template: list[printing.BubbleCoords_to_Candidate] = printing.get_ballot_template(uin, db)
 
           # TODO: Process the scanned ballot
-          # Given the voter's uin, get ballot template
           # Use OMR given the image bytes and ballot template. This gives list of voted candidates.
 
           # Voted Candidates list is hardcoded for now

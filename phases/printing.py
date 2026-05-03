@@ -364,3 +364,26 @@ def build_ballot(ballot_data: BallotData, uin: str, db: Session) -> bytes:
     save_bubble_coordinates(bubble_coords, uin, db)
 
     return pdf_content
+
+# Given a UIN of a voter, return the candidate-coordinate mapping of his ballot.
+# This is a helper function. Used by /submit-ballot
+class BubbleCoords_to_Candidate(BaseModel):
+    candidate_id: int
+    bubble_x_pt: float
+    bubble_y_pt: float
+    page: int
+def get_ballot_template(uin: str, db: Session):
+  ballot_coordinates: list[Bubble_Coordinate] = db.exec(
+    select(Bubble_Coordinate)
+    .where(Bubble_Coordinate.uin == uin)
+  ).all()
+
+  return [
+    BubbleCoords_to_Candidate(
+      candidate_id=row.candidate_id,
+      bubble_x_pt=row.bubble_x_pt,
+      bubble_y_pt=row.bubble_y_pt,
+      page=row.page
+    )
+    for row in ballot_coordinates
+  ]

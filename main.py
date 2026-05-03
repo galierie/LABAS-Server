@@ -94,6 +94,11 @@ async def scan(payload: ScanRequest):
           raise HTTPException(status_code=400, detail="Corrupted voter database entry.")
       elif len_bubbles > 0 or voter.voted:
         raise HTTPException(status_code=400, detail="Corrupted voter database entry.")
+      
+      voter_response = {
+        "precinct": voter.precinct,
+        "voter_status": voter_status,
+      }
 
   except Exception as e:
     # Display error on PrecinctOfficer's screen
@@ -109,7 +114,8 @@ async def scan(payload: ScanRequest):
      "uin": mosip_response["uin"],
      "demographics": mosip_response["demographics"],
      "photo": mosip_response["photo"],
-     "voter_status": voter_status,
+     "precinct": voter_response["precinct"],
+     "voter_status": voter_response["voter_status"],
   } 
   await precinct_officer[device_id].send_json(response)
   # HTTP Response to ESP

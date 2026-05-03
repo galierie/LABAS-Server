@@ -2,14 +2,15 @@
 Define db models based on the created schema
 """
 
+from sqlalchemy import Column, VARCHAR
 from sqlmodel import Field, SQLModel
 from typing import Optional
 
 class Voter(SQLModel, table=True):
     __tablename__ = "voters"
-    uin: int = Field(primary_key=True)
-    precinct: str
-    voted: bool
+    uin: str = Field(sa_column=Column(VARCHAR(10), primary_key=True))
+    precinct: str | None = Field(default=None)
+    voted: bool = Field(default=False)
 
 class Scope(SQLModel, table=True):
     scope_id: int = Field(primary_key=True)

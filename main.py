@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from typing import Dict
 from collections import defaultdict
 from kyc_auth import kyc_auth
-from sqlmodel import Session, create_engine, select, col, text, update, delete
+from sqlmodel import Session, create_engine, select, col, text, update, delete, func
 import orm
 from dotenv import load_dotenv
 import os
@@ -14,6 +14,8 @@ from phases import printing
 # Setup db stuff
 load_dotenv()
 DATABASE_URL = os.getenv("DATABASE_URL")
+if DATABASE_URL is None:
+  raise HTTPException(status_code=500, detail="Missing database URL.")
 engine = create_engine(DATABASE_URL)
 
 app = FastAPI()
@@ -66,16 +68,32 @@ async def scan(payload: ScanRequest):
     # Perform crosschecks with Cast Voter Database
     # Also send results to PrecinctOfficer
     with Session(engine) as session:
-      voter: orm.Voter = session.exec(
-        select(orm.Voter.uin, orm.Voter.precinct, orm.Voter.voted)
+      voter = session.exec(
+        select(orm.Voter)
         .where(orm.Voter.uin == uin)
       ).first()
-    
-      voter_response = {
-        "registered": voter is not None, 
-        "precinct": voter.precinct if voter else None,
-        "voted": voter.voted if voter else False
-      }
+      if voter is None:
+        raise HTTPException(status_code=400, detail="Voter is unregistered.")
+
+      len_bubbles = session.exec(
+        select(func.count(col(orm.Bubble_Coordinate.uin)))
+        .where(orm.Bubble_Coordinate.uin == uin)
+      ).one()
+      
+      voter_status: str | None = None
+      # voter_statuses:
+      #   None = precinct is None, no bubble_coords in db, not voted
+      #   printed = precinct is not None, bubble_coords saved in db, not voted
+      #   tallied = precinct is not None, no bubble_coords in db, voted
+      if voter.precinct is not None:
+        if len_bubbles > 0 and not voter.voted:
+          voter_status = "printed"
+        elif len_bubbles == 0 and voter.voted:
+          voter_status = "tallied"
+        else:
+          raise HTTPException(status_code=400, detail="Corrupted voter database entry.")
+      elif len_bubbles > 0 or voter.voted:
+        raise HTTPException(status_code=400, detail="Corrupted voter database entry.")
 
   except Exception as e:
     # Display error on PrecinctOfficer's screen
@@ -91,9 +109,7 @@ async def scan(payload: ScanRequest):
      "uin": mosip_response["uin"],
      "demographics": mosip_response["demographics"],
      "photo": mosip_response["photo"],
-     "registered_voter": voter_response["registered"],
-     "precinct": voter_response["precinct"],
-     "voted": voter_response["voted"]
+     "voter_status": voter_status,
   } 
   await precinct_officer[device_id].send_json(response)
   # HTTP Response to ESP
@@ -136,16 +152,25 @@ PRINTER = "Brother_MFC_T800W"
 
 @app.get("/print-ballot")
 async def print_ballot(province: str, city: str, uin: str, db: Session = Depends(db_init)):
-  ballot_data = printing.get_ballot_data(db=db, province=province, city=city)
-  pdf_content = printing.build_ballot(ballot_data=ballot_data, uin=uin, db=db)
+  try:
+    ballot_data = printing.get_ballot_data(db=db, province=province, city=city)
+    pdf_content = printing.build_ballot(ballot_data=ballot_data, uin=uin, db=db)
 
+    # Get voter for later
+    voter = db.exec(select(orm.Voter).where(orm.Voter.uin == uin)).first()
+    if voter is None:
+      raise HTTPException(status_code=404, detail="Invalid voter")
+  
+  except Exception:
+    # Display error on PrecinctOfficer's screen
+    return {"status": "failed"}
+
+  # Print before modifying anything to voter data
   result = subprocess.run([
     "lp", "-h", f"localhost:{VM_PORT}", "-d", PRINTER
   ], input=pdf_content, capture_output=True, timeout=30)
   if result.returncode == 0:
     print("Ballot sent to printer successfully.")
-
-    voter = db.exec(select(orm.Voter).where(orm.Voter.uin == uin)).first()
   
     # If valid voter, write in database the precint they generated the ballot
     # for now, this is hardcoded to 'UP Diliman'

@@ -74,7 +74,12 @@ async def scan(payload: ScanRequest):
       ).first()
       if voter is None:
         raise HTTPException(status_code=400, detail="Voter is unregistered.")
-    
+
+      bubble_coords = session.exec(
+        select(orm.Bubble_Coordinate)
+        .where(orm.Bubble_Coordinate.uin == uin)
+      ).all()
+
       voter_response = {
         "registered": voter is not None, 
         "precinct": voter.precinct if voter else None,

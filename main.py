@@ -79,12 +79,21 @@ async def scan(payload: ScanRequest):
         select(orm.Bubble_Coordinate)
         .where(orm.Bubble_Coordinate.uin == uin)
       ).all()
-
-      voter_response = {
-        "registered": voter is not None, 
-        "precinct": voter.precinct if voter else None,
-        "voted": voter.voted if voter else False
-      }
+      
+      voter_status: str | None = None
+      # voter_statuses:
+      #   None = precinct is None, bubble_coords is empty, not voted
+      #   printed = precinct is not None, bubble_coords is not empty, not voted
+      #   tallied = precinct is not None, bubble_coords is empty, voted
+      if voter.precinct is not None:
+        if len(bubble_coords) > 0 and not voter.voted:
+          voter_status = "printed"
+        elif len(bubble_coords) == 0 and voter.voted:
+          voter_status = "tallied"
+        else:
+          raise HTTPException(status_code=400, detail="Corrupted voter database entry.")
+      elif len(bubble_coords) > 0 or voter.voted:
+        raise HTTPException(status_code=400, detail="Corrupted voter database entry.")
 
   except Exception as e:
     # Display error on PrecinctOfficer's screen
@@ -100,9 +109,7 @@ async def scan(payload: ScanRequest):
      "uin": mosip_response["uin"],
      "demographics": mosip_response["demographics"],
      "photo": mosip_response["photo"],
-     "registered_voter": voter_response["registered"],
-     "precinct": voter_response["precinct"],
-     "voted": voter_response["voted"]
+     "voter_status": voter_status,
   } 
   await precinct_officer[device_id].send_json(response)
   # HTTP Response to ESP

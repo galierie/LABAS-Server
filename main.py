@@ -72,6 +72,8 @@ async def scan(payload: ScanRequest):
         select(orm.Voter.uin, orm.Voter.precinct, orm.Voter.voted)
         .where(orm.Voter.uin == uin)
       ).first()
+      if voter is None:
+        raise HTTPException(status_code=400, detail="Voter is unregistered.")
     
       voter_response = {
         "registered": voter is not None, 

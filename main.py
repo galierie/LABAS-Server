@@ -301,7 +301,9 @@ class Message(BaseModel):
   type: MessageType
   payload: Any
 
-# This WebSocket is to be used by  
+# This WebSocket is to be used by PrecinctOfficer's Phone and PC. 
+# Phone sends scanned ballot image bytes to server. Then server processes it to get list of voted candidates.
+# Server then sends that list to the PrecinctOfficer's PC. 
 devices: Dict[str, Dict[Component, WebSocket]] = {} # device_id -> {Component -> WebSocket}
 device_to_voter: Dict[str, str] = {} # device_id -> voter uin
 @app.websocket("/submit-ballot/{device_id}/{component}")

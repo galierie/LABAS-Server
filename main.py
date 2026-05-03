@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from typing import Dict
 from collections import defaultdict
 from kyc_auth import kyc_auth
-from sqlmodel import Session, create_engine, select, col, text, update, delete
+from sqlmodel import Session, create_engine, select, col, text, update, delete, func
 import orm
 from dotenv import load_dotenv
 import os
@@ -75,24 +75,24 @@ async def scan(payload: ScanRequest):
       if voter is None:
         raise HTTPException(status_code=400, detail="Voter is unregistered.")
 
-      bubble_coords = session.exec(
-        select(orm.Bubble_Coordinate)
+      len_bubbles = session.exec(
+        select(func.count(col(orm.Bubble_Coordinate.uin)))
         .where(orm.Bubble_Coordinate.uin == uin)
-      ).all()
+      ).one()
       
       voter_status: str | None = None
       # voter_statuses:
-      #   None = precinct is None, bubble_coords is empty, not voted
-      #   printed = precinct is not None, bubble_coords is not empty, not voted
-      #   tallied = precinct is not None, bubble_coords is empty, voted
+      #   None = precinct is None, no bubble_coords in db, not voted
+      #   printed = precinct is not None, bubble_coords saved in db, not voted
+      #   tallied = precinct is not None, no bubble_coords in db, voted
       if voter.precinct is not None:
-        if len(bubble_coords) > 0 and not voter.voted:
+        if len_bubbles > 0 and not voter.voted:
           voter_status = "printed"
-        elif len(bubble_coords) == 0 and voter.voted:
+        elif len_bubbles == 0 and voter.voted:
           voter_status = "tallied"
         else:
           raise HTTPException(status_code=400, detail="Corrupted voter database entry.")
-      elif len(bubble_coords) > 0 or voter.voted:
+      elif len_bubbles > 0 or voter.voted:
         raise HTTPException(status_code=400, detail="Corrupted voter database entry.")
 
   except Exception as e:

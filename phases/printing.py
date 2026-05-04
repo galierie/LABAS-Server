@@ -367,7 +367,7 @@ def build_ballot(ballot_data: BallotData, uin: str, db: Session) -> bytes:
 
 # Given a UIN of a voter, return the candidate-coordinate mapping of his ballot.
 # This is a helper function. Used by /submit-ballot
-from omr_scanner import BubbleCoordinate
+from phases.omr_scanner import BubbleCoordinate
 def get_ballot_template(uin: str, db: Session) -> list[BubbleCoordinate]:
   ballot_coordinates: list[Bubble_Coordinate] = db.exec(
     select(Bubble_Coordinate)

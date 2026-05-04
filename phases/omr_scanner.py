@@ -8,7 +8,7 @@ import sys
 import cv2
 import numpy as np
 
-from print_constants import (
+from phases.print_constants import (
     PAGE_WIDTH, PAGE_HEIGHT,
     BUBBLE_RADIUS,
     MARKER_SIZE, MARKER_POSITIONS,

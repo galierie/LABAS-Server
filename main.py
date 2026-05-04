@@ -11,6 +11,7 @@ import os
 from fastapi.middleware.cors import CORSMiddleware
 
 from phases import printing
+from phases.omr_scanner import BubbleCoordinate, OMRInputData, check_page
 
 # Setup db stuff
 load_dotenv()
@@ -327,20 +328,9 @@ async def scan_ballot(websocket: WebSocket, device_id: str, component: Component
           
           img_bytestring: str = msg.payload
           uin = device_to_voter[device_id]
-          ballot_template: list[printing.BubbleCoords_to_Candidate] = printing.get_ballot_template(uin, db)
-
-          # TODO: Process the scanned ballot
-          # Use OMR given the image bytes and ballot template. This gives list of voted candidates.
-
-          # Voted Candidates list is hardcoded for now
-          voted_candidates_list: list[CandidateDisplay] = [
-            CandidateDisplay(
-              candidate_id=1,
-              first_name="President",
-              middle_name="1",
-              last_name="Candidate"
-            )
-          ]
+          ballot_template: list[BubbleCoordinate] = printing.get_ballot_template(uin, db)
+          omr_input: OMRInputData = OMRInputData(coords_json=ballot_template, scan_bytes=img_bytestring)
+          voted_candidates_list, _ = check_page(omr_input)
 
           pc_websocket = devices[device_id][Component.PC]
           await pc_websocket.send_json(Message(

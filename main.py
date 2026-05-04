@@ -330,12 +330,22 @@ async def scan_ballot(websocket: WebSocket, device_id: str, component: Component
           uin = device_to_voter[device_id]
           ballot_template: list[BubbleCoordinate] = printing.get_ballot_template(uin, db)
           omr_input: OMRInputData = OMRInputData(coords_json=ballot_template, scan_bytes=img_bytestring)
-          voted_candidates_list, _ = check_page(omr_input)
+          voted_candidates_ids, _ = check_page(omr_input)
+
+          voted_candidates = db.exec(
+            select(orm.Candidate)
+            .where(col(orm.Candidate.candidate_id).in_(voted_candidates_ids))
+          ).all()
+
+          def parse_voted_candidate(candidate: orm.Candidate):
+            return CandidateDisplay(candidate_id=candidate.candidate_id, first_name=candidate.first_name, middle_name=candidate.middle_name, last_name=candidate.last_name)
+
+          voted_candidates_list = list(map(parse_voted_candidate, voted_candidates))
 
           pc_websocket = devices[device_id][Component.PC]
           await pc_websocket.send_json(Message(
             type=MessageType.CANDIDATES,
-            payload=[voted_candidate.model_dump() for voted_candidate in voted_candidates_list]
+            payload=[voted_candidate.model_dump_json() for voted_candidate in voted_candidates_list]
           ).model_dump())
 
   except WebSocketDisconnect:

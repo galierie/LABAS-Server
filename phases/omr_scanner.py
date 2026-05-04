@@ -127,9 +127,8 @@ def measure_fill(bin_inv, cx, cy, r):
 
 
 def check_page(input: OMRInputData, threshold=DEFAULT_THRESHOLD) -> tuple[list[int], bytes]:
-    with open(input.coords_json, encoding="utf-8") as f:
-        bubbles = json.load(f)
-
+    bubbles = input.coords_json
+    
     arr = np.frombuffer(input.scan_bytes, dtype=np.uint8)
     img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)

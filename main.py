@@ -400,7 +400,7 @@ async def get_tally(province: str|None = None, city: str|None = None, db: Sessio
       orm.Candidate.province_id,
       orm.Province.province_name,
       orm.Candidate.city_id,
-      orm.City.city_id,
+      orm.City.city_name,
       orm.Tally.votecount
     )
     .join(orm.Position, orm.Candidate.position_id == orm.Position.position_id)

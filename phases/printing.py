@@ -31,7 +31,7 @@ from orm import Province, City, Candidate, Position, Scope, Bubble_Coordinate
 
 
 from phases.print_constants import (
-    A4,
+    PAGE_SIZE,
     PAGE_MARGIN,
     PAGE_WIDTH,
     PAGE_HEIGHT,
@@ -311,7 +311,7 @@ def build_ballot(ballot_data: BallotData, uin: str, db: Session) -> bytes:
 
     # Save to IO buffer, not to disk, to enable return from API route
     buffer = BytesIO()
-    doc = BaseDocTemplate(buffer, pagesize=A4)
+    doc = BaseDocTemplate(buffer, pagesize=PAGE_SIZE)
 
     init_ballot_with_election_data = partial(init_ballot, election_data=ballot_data.election)
     doc.addPageTemplates([

@@ -287,8 +287,8 @@ class Message(BaseModel):
 # Server then sends that list to the PrecinctOfficer's PC. 
 devices: Dict[str, Dict[Component, WebSocket]] = {} # device_id -> {Component -> WebSocket}
 device_to_voter: Dict[str, str] = {} # device_id -> voter uin
-@app.websocket("/submit-ballot/{device_id}/{component}")
-async def submit_ballot(websocket: WebSocket, device_id: str, component: Component, db: Session = Depends(db_init)):
+@app.websocket("/scan-ballot/{device_id}/{component}")
+async def scan_ballot(websocket: WebSocket, device_id: str, component: Component, db: Session = Depends(db_init)):
   await websocket.accept()
 
   if device_id not in devices:

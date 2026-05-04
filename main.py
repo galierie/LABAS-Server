@@ -1,15 +1,17 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Depends, Response
 from pydantic import BaseModel
-from typing import Dict
+from typing import Any, Dict, Optional
 from collections import defaultdict
+from enum import Enum
 from kyc_auth import kyc_auth
-from sqlmodel import Session, create_engine, select, col, text, update, delete, func
+from sqlmodel import Session, create_engine, select, col, text, update, delete, func, and_, or_
 import orm
 from dotenv import load_dotenv
 import os
 from fastapi.middleware.cors import CORSMiddleware
 
 from phases import printing
+from phases.omr_scanner import BubbleCoordinate, OMRInputData, check_page
 
 # Setup db stuff
 load_dotenv()
@@ -190,25 +192,6 @@ async def print_ballot(province: str, city: str, uin: str, db: Session = Depends
     print(f"Error: {result.stderr.decode()}")
     return {"status": "failed"}
 
-# Given a UIN of a voter, return the candidate-coordinate mapping of his ballot.
-# This is called by PrecinctOfficer.
-@app.get("/get-ballot-template")
-async def get_ballot_template(uin: str, db: Session = Depends(db_init)):
-  ballot_coordinates: list[orm.Bubble_Coordinate] = db.exec(
-    select(orm.Bubble_Coordinate)
-    .where(orm.Bubble_Coordinate.uin == uin)
-  ).all()
-
-  return [
-    {
-      "candidate_id": row.candidate_id,
-      "bubble_x_pt": row.bubble_x_pt,
-      "bubble_y_pt": row.bubble_y_pt,
-      "page": row.page
-    }
-    for row in ballot_coordinates
-  ]
-
 class TallyRequest(BaseModel):
   uin: str
   candidate_ids: list[int]
@@ -281,3 +264,185 @@ async def tally(request: TallyRequest, db: Session = Depends(db_init)):
   else:
     return {"status": "Added all votes to the tally."}
     
+
+class Component(str, Enum):
+  PHONE = "phone"
+  PC = "pc"
+class MessageType(str, Enum):
+  UIN = "uin"
+  IMAGE = "image"
+  CANDIDATES = "candidates display"
+  ACK = "ack"
+  ERROR = "error"
+class CandidateDisplay(BaseModel):
+  candidate_id: int
+  first_name: str
+  middle_name: Optional[str]
+  last_name: str
+class Message(BaseModel):
+  type: MessageType
+  payload: Any
+
+# This WebSocket is to be used by PrecinctOfficer's Phone and PC. 
+# Phone sends scanned ballot image bytes to server. Then server processes it to get list of voted candidates.
+# Server then sends that list to the PrecinctOfficer's PC. 
+devices: Dict[str, Dict[Component, WebSocket]] = {} # device_id -> {Component -> WebSocket}
+device_to_voter: Dict[str, str] = {} # device_id -> voter uin
+@app.websocket("/scan-ballot/{device_id}/{component}")
+async def scan_ballot(websocket: WebSocket, device_id: str, component: Component, db: Session = Depends(db_init)):
+  await websocket.accept()
+
+  if device_id not in devices:
+    devices[device_id] = {}
+  devices[device_id][component] = websocket
+
+  try:
+    while True:
+      raw = await websocket.receive_json()
+      msg = Message(**raw)
+      
+      # PrecinctOfficer PC sends voter UIN to server. Server associates it to device_id 
+      if component == Component.PC:
+        if msg.type == MessageType.UIN:
+          uin = msg.payload
+          device_to_voter[device_id] = uin
+
+          await websocket.send_json(Message(
+            type=MessageType.ACK,
+            payload=f"PrecinctOfficer PC {device_id} connected to server."
+          ).model_dump())
+
+      # PrecinctOfficer Phone sends ballot img bytes to server.
+      # Server processes img via OMR, with respect to voter's ballot template
+      # Server sends voted candidates list to corresponding PC      
+      elif component == Component.PHONE:
+        if msg.type == MessageType.IMAGE:
+          
+          # Make sure that corresponding PrecinctOfficer PC has connected first.
+          if device_id not in devices or Component.PC not in devices[device_id] or device_id not in device_to_voter:
+            await websocket.send_json(Message(
+              type=MessageType.ERROR,
+              payload="PrecinctOfficer PC {device_id} not yet connected to server. Please scan again once it is connected."
+            ).model_dump())
+            continue
+          
+          img_bytestring: str = msg.payload
+          uin = device_to_voter[device_id]
+          ballot_template: list[BubbleCoordinate] = printing.get_ballot_template(uin, db)
+          omr_input: OMRInputData = OMRInputData(coords_json=ballot_template, scan_bytes=img_bytestring)
+          voted_candidates_list, _ = check_page(omr_input)
+
+          pc_websocket = devices[device_id][Component.PC]
+          await pc_websocket.send_json(Message(
+            type=MessageType.CANDIDATES,
+            payload=[voted_candidate.model_dump() for voted_candidate in voted_candidates_list]
+          ).model_dump())
+
+  except WebSocketDisconnect:
+    if device_id in devices and component in devices[device_id]:
+      del devices[device_id][component]
+    if device_id in devices and not devices[device_id]:
+      devices.pop(device_id, None)
+      device_to_voter.pop(device_id, None)
+
+
+# This HTTP GET endpoint could be called by the tally webpage.
+# Essentially, given optional province and city, it returns information regarding the corresponding candidates' votecount. Refer to implementation for how candidates are filtered.
+@app.get("/get-tally")
+async def get_tally(province: str|None = None, city: str|None = None, db: Session = Depends(db_init)):
+
+  # Validate province
+  if province is not None:
+    province_obj: orm.Province = db.exec(
+      select(orm.Province).
+      where(orm.Province.province_name == province)
+    ).first()
+    if not province_obj:
+      raise HTTPException(
+        status_code=404,
+        detail=f"Province '{province}' not found."
+      )
+  
+  # Validate city
+  if city is not None:
+    city_obj: orm.City = db.exec(
+      select(orm.City)
+      .where(orm.City.city_name == city)
+    ).first()
+    if not city_obj:
+      raise HTTPException(
+        status_code=404,
+        detail=f"City '{city}' not found."
+      )
+
+  # Start from all candidates
+  sqlquery = (
+    select(
+      orm.Candidate.candidate_id,
+      orm.Candidate.first_name,
+      orm.Candidate.middle_name,
+      orm.Candidate.last_name,
+      orm.Candidate.party,
+      orm.Candidate.position_id,
+      orm.Position.position_name,
+      orm.Scope.scope_id,
+      orm.Scope.scope_name,
+      orm.Candidate.province_id,
+      orm.Province.province_name,
+      orm.Candidate.city_id,
+      orm.City.city_name,
+      orm.Tally.votecount
+    )
+    .join(orm.Position, orm.Candidate.position_id == orm.Position.position_id)
+    .join(orm.Scope, orm.Position.scope_id == orm.Scope.scope_id)
+    .join(orm.Tally, orm.Candidate.candidate_id == orm.Tally.candidate_id)
+    .join(orm.Province, orm.Candidate.province_id == orm.Province.province_id, isouter=True)
+    .join(orm.City, orm.Candidate.city_id == orm.City.city_id, isouter=True)
+  )
+
+  # If province and city are None, return tally for national scope only
+  if province is None and city is None:
+    sqlquery = sqlquery.where(orm.Scope.scope_id == 1)
+  
+  # If province is provided, but city is None, return tally for that province only.
+  elif province is not None and city is None:
+    sqlquery = sqlquery.where(
+      and_(
+        orm.Scope.scope_id == 2,
+        orm.Province.province_name == province
+      )
+    )
+
+  # If province is None, but city is provided, return tally for that city only
+  elif province is None and city is not None:
+    sqlquery = sqlquery.where(
+      and_(
+        orm.Scope.scope_id == 3,
+        orm.City.city_name == city
+      )
+    )
+  
+  # If province and city are provided, return tallies for national scope, that province's scope, and that city's scope
+  else:
+    sqlquery = sqlquery.where(
+      or_(
+        orm.Scope.scope_id == 1,
+        and_(
+          orm.Scope.scope_id == 2,
+          orm.Province.province_name == province
+        ),
+        and_(
+          orm.Scope.scope_id == 3,
+          orm.City.city_name == city
+        )
+      )
+    )
+  
+  # For convenience, sort by scope_id and then by votecount.
+  sqlquery = sqlquery.order_by(
+    orm.Candidate.position_id, 
+    orm.Tally.votecount.desc()
+  )
+
+  results = db.exec(sqlquery).mappings().all()
+  return results

@@ -1,6 +1,6 @@
 from __future__ import annotations
 from pydantic import BaseModel
-from typing import TypeDict
+from typing import TypedDict
 import argparse
 import json
 import sys
@@ -8,7 +8,7 @@ import sys
 import cv2
 import numpy as np
 
-from constants import (
+from phases.print_constants import (
     PAGE_WIDTH, PAGE_HEIGHT,
     BUBBLE_RADIUS,
     MARKER_SIZE, MARKER_POSITIONS,
@@ -28,14 +28,14 @@ ALIGN_DPI = 200
 
 # Base Models
 
-class BubbleCoordinate(TypeDict):
+class BubbleCoordinate(TypedDict):
     candidate_id: int
     bubble_x_pt: float
     bubble_y_pt: float
     page: int
 
 class OMRInputData(BaseModel):
-    coords_json: BubbleCoordinate
+    coords_json: list[BubbleCoordinate]
     scan_bytes: bytes
 
 def detect_corners(gray):
@@ -127,9 +127,8 @@ def measure_fill(bin_inv, cx, cy, r):
 
 
 def check_page(input: OMRInputData, threshold=DEFAULT_THRESHOLD) -> tuple[list[int], bytes]:
-    with open(input.coords_json, encoding="utf-8") as f:
-        bubbles = json.load(f)
-
+    bubbles = input.coords_json
+    
     arr = np.frombuffer(input.scan_bytes, dtype=np.uint8)
     img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)

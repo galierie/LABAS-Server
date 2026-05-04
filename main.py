@@ -360,6 +360,31 @@ async def scan_ballot(websocket: WebSocket, device_id: str, component: Component
 # Essentially, given optional province and city, it returns information regarding the corresponding candidates' votecount. Refer to implementation for how candidates are filtered.
 @app.get("/get-tally")
 async def get_tally(province: str|None = None, city: str|None = None, db: Session = Depends(db_init)):
+
+  # Validate province
+  if province is not None:
+    province_obj: orm.Province = db.exec(
+      select(orm.Province).
+      where(orm.Province.province_name == province)
+    ).first()
+    if not province_obj:
+      raise HTTPException(
+        status_code=404,
+        detail=f"Province '{province}' not found."
+      )
+  
+  # Validate city
+  if city is not None:
+    city_obj: orm.City = db.exec(
+      select(orm.City)
+      .where(orm.City.city_name == city)
+    ).first()
+    if not city_obj:
+      raise HTTPException(
+        status_code=404,
+        detail=f"City '{city}' not found."
+      )
+
   # Start from all candidates
   sqlquery = (
     select(

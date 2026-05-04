@@ -4,7 +4,7 @@ from typing import Any, Dict, Optional
 from collections import defaultdict
 from enum import Enum
 from kyc_auth import kyc_auth
-from sqlmodel import Session, create_engine, select, col, text, update, delete, func
+from sqlmodel import Session, create_engine, select, col, text, update, delete, func, and_, or_
 import orm
 from dotenv import load_dotenv
 import os
@@ -354,3 +354,78 @@ async def submit_ballot(websocket: WebSocket, device_id: str, component: Compone
     if device_id in devices and not devices[device_id]:
       devices.pop(device_id, None)
       device_to_voter.pop(device_id, None)
+
+
+@app.get("/get-tally")
+async def get_tally(province: str|None = None, city: str|None = None, db: Session = Depends(db_init)):
+  # Start from all candidates
+  sqlquery = (
+    select(
+      orm.Candidate.candidate_id,
+      orm.Candidate.first_name,
+      orm.Candidate.middle_name,
+      orm.Candidate.last_name,
+      orm.Candidate.party,
+      orm.Candidate.position_id,
+      orm.Position.position_name,
+      orm.Scope.scope_id,
+      orm.Scope.scope_name,
+      orm.Candidate.province_id,
+      orm.Province.province_name,
+      orm.Candidate.city_id,
+      orm.City.city_id,
+      orm.Tally.votecount
+    )
+    .join(orm.Position, orm.Candidate.position_id == orm.Position.position_id)
+    .join(orm.Scope, orm.Position.scope_id == orm.Scope.scope_id)
+    .join(orm.Tally, orm.Candidate.candidate_id == orm.Tally.candidate_id)
+    .join(orm.Province, orm.Candidate.province_id == orm.Province.province_id, isouter=True)
+    .join(orm.City, orm.Candidate.city_id == orm.City.city_id, isouter=True)
+  )
+
+  # If province and city are None, return tally for national scope only
+  if province is None and city is None:
+    sqlquery = sqlquery.where(orm.Scope.scope_id == 1)
+  
+  # If province is provided, but city is None, return tally for that province only.
+  elif province is not None and city is None:
+    sqlquery = sqlquery.where(
+      and_(
+        orm.Scope.scope_id == 2,
+        orm.Province.province_name == province
+      )
+    )
+
+  # If province is None, but city is provided, return tally for that city only
+  elif province is None and city is not None:
+    sqlquery = sqlquery.where(
+      and_(
+        orm.Scope.scope_id == 3,
+        orm.City.city_name == city
+      )
+    )
+  
+  # If province and city are provided, return tallies for national scope, that province's scope, and that city's scope
+  else:
+    sqlquery = sqlquery.where(
+      or_(
+        orm.Scope.scope_id == 1,
+        and_(
+          orm.Scope.scope_id == 2,
+          orm.Province.province_name == province
+        ),
+        and_(
+          orm.Scope.scope_id == 3,
+          orm.City.city_name == city
+        )
+      )
+    )
+  
+  # For convenience, sort by scope_id and then by votecount.
+  sqlquery = sqlquery.order_by(
+    orm.Candidate.position_id, 
+    orm.Tally.votecount.desc()
+  )
+
+  results = db.exec(sqlquery).mappings().all()
+  return results

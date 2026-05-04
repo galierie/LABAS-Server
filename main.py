@@ -356,6 +356,8 @@ async def scan_ballot(websocket: WebSocket, device_id: str, component: Component
       device_to_voter.pop(device_id, None)
 
 
+# This HTTP GET endpoint could be called by the tally webpage.
+# Essentially, given optional province and city, it returns information regarding the corresponding candidates' votecount. Refer to implementation for how candidates are filtered.
 @app.get("/get-tally")
 async def get_tally(province: str|None = None, city: str|None = None, db: Session = Depends(db_init)):
   # Start from all candidates

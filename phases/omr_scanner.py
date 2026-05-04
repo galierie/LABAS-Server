@@ -1,4 +1,6 @@
 from __future__ import annotations
+from pydantic import BaseModel
+from typing import TypeDict
 import argparse
 import json
 import sys
@@ -12,6 +14,8 @@ from constants import (
     MARKER_SIZE, MARKER_POSITIONS,
 )
 
+# from printing import 
+
 PAGE_WIDTH_PT = PAGE_WIDTH
 PAGE_HEIGHT_PT = PAGE_HEIGHT
 BUBBLE_RADIUS_PT = BUBBLE_RADIUS
@@ -22,6 +26,17 @@ MARKERS_PT = [(x + MARKER_SIZE / 2, y + MARKER_SIZE / 2)
 DEFAULT_THRESHOLD = 0.4
 ALIGN_DPI = 200
 
+# Base Models
+
+class BubbleCoordinate(TypeDict):
+    candidate_id: int
+    bubble_x_pt: float
+    bubble_y_pt: float
+    page: int
+
+class OMRInputData(BaseModel):
+    coords_json: BubbleCoordinate
+    scan_bytes: bytes
 
 def detect_corners(gray):
     h, w = gray.shape
@@ -111,11 +126,11 @@ def measure_fill(bin_inv, cx, cy, r):
     return float(np.mean(bin_inv[y0:y1, x0:x1][mask] > 0))
 
 
-def check_page(coords_json, scan_bytes, threshold=DEFAULT_THRESHOLD):
-    with open(coords_json, encoding="utf-8") as f:
+def check_page(input: OMRInputData, threshold=DEFAULT_THRESHOLD) -> tuple[list[int], bytes]:
+    with open(input.coords_json, encoding="utf-8") as f:
         bubbles = json.load(f)
 
-    arr = np.frombuffer(scan_bytes, dtype=np.uint8)
+    arr = np.frombuffer(input.scan_bytes, dtype=np.uint8)
     img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
@@ -137,9 +152,7 @@ def check_page(coords_json, scan_bytes, threshold=DEFAULT_THRESHOLD):
         fill = measure_fill(bin_inv, cx, cy, radius_px)
         debug_records.append((cx, cy, fill))
         if fill >= threshold:
-            results.append({
-                "candidate_id": b["candidate_id"],
-            })
+            results.append(b["candidate_id"])
 
     dbg = cv2.cvtColor(warped_gray, cv2.COLOR_GRAY2BGR)
     for cx, cy, fill in debug_records:
@@ -148,21 +161,22 @@ def check_page(coords_json, scan_bytes, threshold=DEFAULT_THRESHOLD):
 
     _, buf = cv2.imencode(".png", dbg)
     # cv2.imwrite("debug.png", dbg)
+
     return results, buf.tobytes()
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("coords_json")
-    ap.add_argument("img")
-    args = ap.parse_args()
+# def main():
+#     ap = argparse.ArgumentParser()
+#     ap.add_argument("coords_json")
+#     ap.add_argument("img")
+#     args = ap.parse_args()
 
-    with open(args.img, "rb") as f:
-        scan_bytes = f.read()
+#     with open(args.img, "rb") as f:
+#         scan_bytes = f.read()
 
-    results, debug_png = check_page(
-        args.coords_json, scan_bytes)
+#     results, debug_png = check_page(
+#         args.coords_json, scan_bytes)
 
 
-if __name__ == "__main__":
-    sys.exit(main() or 0)
+# if __name__ == "__main__":
+#     sys.exit(main() or 0)

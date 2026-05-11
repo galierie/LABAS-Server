@@ -1,15 +1,16 @@
+from reportlab.lib.pagesizes import letter
 from reportlab.lib.units import mm, inch
 
-PAGE_SIZE = (8.5 * inch, 13 * inch)
+PAGE_SIZE = letter
 PAGE_WIDTH, PAGE_HEIGHT = PAGE_SIZE
-PAGE_MARGIN = 15 * mm
+PAGE_MARGIN = 10 * mm
 
 N_COLS = 4
 
 BUBBLE_RADIUS = 2.5 * mm
 BUBBLE_SPACING = 2 * mm
 
-MARKER_SIZE = 8 * mm
+MARKER_SIZE = 6 * mm
 MARKER_INSET = 5 * mm
 MARKER_POSITIONS = [
     (MARKER_INSET, MARKER_INSET),  # bottom left

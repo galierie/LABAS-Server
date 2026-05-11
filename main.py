@@ -9,6 +9,8 @@ import orm
 from dotenv import load_dotenv
 import os
 from fastapi.middleware.cors import CORSMiddleware
+import asyncio
+import base64
 
 from phases import printing
 from phases.omr_scanner import BubbleCoordinate, OMRInputData, check_page
@@ -30,6 +32,59 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+DUMMY_DATA = {
+  "mikel": {
+     "uin": "2054873096",# mosip_response["uin"],
+     "demographics": {
+        "location1_eng": "City of Pasig",
+        "location3_eng": "Metropolitan Manila Second District",
+     },# mosip_response["demographics"],
+     "photo": "", #mosip_response["photo"],
+     "precinct": "UP Diliman",# voter_response["precinct"],
+     "voter_status": "printed",# voter_response["voter_status"],
+  },
+  "dale": {
+     "uin": "9471253705",# mosip_response["uin"],
+     "demographics": {
+        "location1_eng": "City of Pasig",
+        "location3_eng": "Metropolitan Manila Second District",
+     },# mosip_response["demographics"],
+     "photo": "", #mosip_response["photo"],
+     "precinct": "UP Diliman",# voter_response["precinct"],
+     "voter_status": "printed",# voter_response["voter_status"],
+  },
+  "lian": {
+     "uin": "9039823146",# mosip_response["uin"],
+     "demographics": {
+        "location1_eng": "Angeles City",
+        "location3_eng": "Pampanga",
+     },# mosip_response["demographics"],
+     "photo": "", #mosip_response["photo"],
+     "precinct": "UP Diliman",# voter_response["precinct"],
+     "voter_status": "tallied",# voter_response["voter_status"],
+  },
+  "miguel": {
+     "uin": "8561086326",# mosip_response["uin"],
+     "demographics": {
+        "location1_eng": "Angeles City",
+        "location3_eng": "Pampanga",
+     },# mosip_response["demographics"],
+     "photo": "", #mosip_response["photo"],
+     "precinct": "",# voter_response["precinct"],
+     "voter_status": None,# voter_response["voter_status"],
+  },
+    "yenyen": {
+     "uin": "6523508751",# mosip_response["uin"],
+     "demographics": {
+        "location1_eng": "Quezon City",
+        "location3_eng": "Metropolitan Manila Second District",
+     },# mosip_response["demographics"],
+     "photo": "", #mosip_response["photo"],
+     "precinct": "",# voter_response["precinct"],
+     "voter_status": None,# voter_response["voter_status"],
+  },
+}
 
 # Helper function for getting session
 def db_init():
@@ -119,6 +174,13 @@ async def scan(payload: ScanRequest):
      "precinct": voter_response["precinct"],
      "voter_status": voter_response["voter_status"],
   } 
+
+  # Temporary dummy data
+  # response = DUMMY_DATA["miguel"]
+  # response = DUMMY_DATA["dale"]
+  # response = DUMMY_DATA["lian"]
+  # response = DUMMY_DATA["yenyen"]
+
   await precinct_officer[device_id].send_json(response)
   # HTTP Response to ESP
   return {
@@ -282,79 +344,62 @@ class CandidateDisplay(BaseModel):
 class Message(BaseModel):
   type: MessageType
   payload: Any
+class ScanBallotRequest(BaseModel):
+    uin: str
+    image: str  # base64 PNG
 
-# This WebSocket is to be used by PrecinctOfficer's Phone and PC. 
-# Phone sends scanned ballot image bytes to server. Then server processes it to get list of voted candidates.
-# Server then sends that list to the PrecinctOfficer's PC. 
-devices: Dict[str, Dict[Component, WebSocket]] = {} # device_id -> {Component -> WebSocket}
-device_to_voter: Dict[str, str] = {} # device_id -> voter uin
-@app.websocket("/scan-ballot/{device_id}/{component}")
-async def scan_ballot(websocket: WebSocket, device_id: str, component: Component, db: Session = Depends(db_init)):
-  await websocket.accept()
+# This POST request expects a base64 encoded image and the voter's uin
+# It then checks if both uin and image are valid.
+# If so, it gets the ballot template for that uin, scans the ballot using OMR then returns the candidate list
+@app.post("/scan-ballot")
+async def scan_ballot(request: ScanBallotRequest, db: Session = Depends(db_init)):
 
-  if device_id not in devices:
-    devices[device_id] = {}
-  devices[device_id][component] = websocket
+  uin = request.uin
+  scan_bytes = base64.b64decode(request.image)
+
+  # Get ballot template based on UIN
+  ballot_template: list[BubbleCoordinate] = printing.get_ballot_template(uin, db)
+
+  if len(ballot_template) == 0:
+    # Add error if ballot template is empty
+    print("UIN does not have a ballot yet. Make sure to generate ballot first")
+    raise HTTPException(
+      status_code=400,
+      detail="UIN does not have a ballot yet. Make sure to generate ballot first"
+    )
+
+  if not scan_bytes:
+    raise HTTPException(
+      status_code=500,
+      detail="Scanner returned empty image."
+    )
 
   try:
-    while True:
-      raw = await websocket.receive_json()
-      msg = Message(**raw)
-      
-      # PrecinctOfficer PC sends voter UIN to server. Server associates it to device_id 
-      if component == Component.PC:
-        if msg.type == MessageType.UIN:
-          uin = msg.payload
-          device_to_voter[device_id] = uin
+    # Perform OMR Scan, ensure that proper errors are sent
+    omr_input: OMRInputData = OMRInputData(coords_json=ballot_template, scan_bytes=scan_bytes)
+    voted_candidates_ids, _ = check_page(omr_input)
 
-          await websocket.send_json(Message(
-            type=MessageType.ACK,
-            payload=f"PrecinctOfficer PC {device_id} connected to server."
-          ).model_dump())
+    voted_candidates = db.exec(
+      select(orm.Candidate)
+      .where(col(orm.Candidate.candidate_id).in_(voted_candidates_ids))
+    ).all()
 
-      # PrecinctOfficer Phone sends ballot img bytes to server.
-      # Server processes img via OMR, with respect to voter's ballot template
-      # Server sends voted candidates list to corresponding PC      
-      elif component == Component.PHONE:
-        if msg.type == MessageType.IMAGE:
-          
-          # Make sure that corresponding PrecinctOfficer PC has connected first.
-          if device_id not in devices or Component.PC not in devices[device_id] or device_id not in device_to_voter:
-            await websocket.send_json(Message(
-              type=MessageType.ERROR,
-              payload="PrecinctOfficer PC {device_id} not yet connected to server. Please scan again once it is connected."
-            ).model_dump())
-            continue
-          
-          img_bytestring: str = msg.payload
-          uin = device_to_voter[device_id]
-          ballot_template: list[BubbleCoordinate] = printing.get_ballot_template(uin, db)
-          omr_input: OMRInputData = OMRInputData(coords_json=ballot_template, scan_bytes=img_bytestring)
-          voted_candidates_ids, _ = check_page(omr_input)
+    def parse_voted_candidate(candidate: orm.Candidate):
+      return CandidateDisplay(candidate_id=candidate.candidate_id, first_name=candidate.first_name, middle_name=candidate.middle_name, last_name=candidate.last_name)
 
-          voted_candidates = db.exec(
-            select(orm.Candidate)
-            .where(col(orm.Candidate.candidate_id).in_(voted_candidates_ids))
-          ).all()
+    voted_candidates_list = list(map(parse_voted_candidate, voted_candidates))
 
-          def parse_voted_candidate(candidate: orm.Candidate):
-            return CandidateDisplay(candidate_id=candidate.candidate_id, first_name=candidate.first_name, middle_name=candidate.middle_name, last_name=candidate.last_name)
+    return Message(
+      type=MessageType.CANDIDATES,
+      payload=[voted_candidate.model_dump() for voted_candidate in voted_candidates_list],
+    ).model_dump()
 
-          voted_candidates_list = list(map(parse_voted_candidate, voted_candidates))
-
-          pc_websocket = devices[device_id][Component.PC]
-          await pc_websocket.send_json(Message(
-            type=MessageType.CANDIDATES,
-            payload=[voted_candidate.model_dump_json() for voted_candidate in voted_candidates_list]
-          ).model_dump())
-
-  except WebSocketDisconnect:
-    if device_id in devices and component in devices[device_id]:
-      del devices[device_id][component]
-    if device_id in devices and not devices[device_id]:
-      devices.pop(device_id, None)
-      device_to_voter.pop(device_id, None)
-
+  except Exception as e:
+    # OMR failed (corners not found, blur, bad angle, etc.)
+    raise HTTPException(
+      status_code=400,
+      detail="OMR Failed. Place the ballot properly and scan again."
+    )
 
 # This HTTP GET endpoint could be called by the tally webpage.
 # Essentially, given optional province and city, it returns information regarding the corresponding candidates' votecount. Refer to implementation for how candidates are filtered.

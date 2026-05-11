@@ -33,6 +33,59 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+DUMMY_DATA = {
+  "mikel": {
+     "uin": "2054873096",# mosip_response["uin"],
+     "demographics": {
+        "location1_eng": "City of Pasig",
+        "location3_eng": "Metropolitan Manila Second District",
+     },# mosip_response["demographics"],
+     "photo": "", #mosip_response["photo"],
+     "precinct": "UP Diliman",# voter_response["precinct"],
+     "voter_status": "printed",# voter_response["voter_status"],
+  },
+  "dale": {
+     "uin": "9471253705",# mosip_response["uin"],
+     "demographics": {
+        "location1_eng": "City of Pasig",
+        "location3_eng": "Metropolitan Manila Second District",
+     },# mosip_response["demographics"],
+     "photo": "", #mosip_response["photo"],
+     "precinct": "UP Diliman",# voter_response["precinct"],
+     "voter_status": "printed",# voter_response["voter_status"],
+  },
+  "lian": {
+     "uin": "9039823146",# mosip_response["uin"],
+     "demographics": {
+        "location1_eng": "Angeles City",
+        "location3_eng": "Pampanga",
+     },# mosip_response["demographics"],
+     "photo": "", #mosip_response["photo"],
+     "precinct": "UP Diliman",# voter_response["precinct"],
+     "voter_status": "tallied",# voter_response["voter_status"],
+  },
+  "miguel": {
+     "uin": "8561086326",# mosip_response["uin"],
+     "demographics": {
+        "location1_eng": "Angeles City",
+        "location3_eng": "Pampanga",
+     },# mosip_response["demographics"],
+     "photo": "", #mosip_response["photo"],
+     "precinct": "",# voter_response["precinct"],
+     "voter_status": None,# voter_response["voter_status"],
+  },
+    "yenyen": {
+     "uin": "6523508751",# mosip_response["uin"],
+     "demographics": {
+        "location1_eng": "Quezon City",
+        "location3_eng": "Metropolitan Manila Second District",
+     },# mosip_response["demographics"],
+     "photo": "", #mosip_response["photo"],
+     "precinct": "",# voter_response["precinct"],
+     "voter_status": None,# voter_response["voter_status"],
+  },
+}
+
 # Helper function for getting session
 def db_init():
   with Session(engine) as session:
@@ -121,6 +174,13 @@ async def scan(payload: ScanRequest):
      "precinct": voter_response["precinct"],
      "voter_status": voter_response["voter_status"],
   } 
+
+  # Temporary dummy data
+  # response = DUMMY_DATA["miguel"]
+  # response = DUMMY_DATA["dale"]
+  # response = DUMMY_DATA["lian"]
+  # response = DUMMY_DATA["yenyen"]
+
   await precinct_officer[device_id].send_json(response)
   # HTTP Response to ESP
   return {

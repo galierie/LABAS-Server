@@ -344,6 +344,9 @@ class CandidateDisplay(BaseModel):
 class Message(BaseModel):
   type: MessageType
   payload: Any
+class ScanBallotRequest(BaseModel):
+    uin: str
+    image: str  # base64 PNG
 
 # This WebSocket is to be used by PrecinctOfficer's Phone and PC. 
 # Phone sends scanned ballot image bytes to server. Then server processes it to get list of voted candidates.

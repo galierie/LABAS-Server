@@ -9,6 +9,8 @@ import orm
 from dotenv import load_dotenv
 import os
 from fastapi.middleware.cors import CORSMiddleware
+import asyncio
+import base64
 
 from phases import printing
 from phases.omr_scanner import BubbleCoordinate, OMRInputData, check_page

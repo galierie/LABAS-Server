@@ -37,7 +37,7 @@ class BubbleCoordinate(TypedDict):
 
 class OMRInputData(BaseModel):
     coords_json: list[BubbleCoordinate]
-    scan_bytes: str
+    scan_bytes: bytes
 
 def detect_corners(gray):
     h, w = gray.shape
@@ -131,7 +131,8 @@ def check_page(input: OMRInputData, threshold=DEFAULT_THRESHOLD) -> tuple[list[i
     bubbles = input.coords_json
 
     # Decode the base64 string into raw image bytes
-    image_bytes = base64.b64decode(input.scan_bytes)
+    # image_bytes = base64.b64decode(input.scan_bytes)
+    image_bytes = input.scan_bytes
     
     arr = np.frombuffer(image_bytes, dtype=np.uint8)
     img = cv2.imdecode(arr, cv2.IMREAD_COLOR)

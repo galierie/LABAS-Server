@@ -120,7 +120,20 @@ async def scan(payload: ScanRequest):
     dob: str = payload.qr.get("dob", None)
     if uin == None or dob == None:
       raise Exception("QR missing UIN or DOB. Cannot authenticate")
-    mosip_response = kyc_auth(uin, dob)
+
+    loop = asyncio.get_event_loop()
+
+    # Add a timeout for MOSIP auth if it exceeded 1 minute
+    try:
+      mosip_response = await asyncio.wait_for(
+        loop.run_in_executor(None, kyc_auth, uin, dob),
+        timeout=60.0
+      )
+    except asyncio.TimeoutError:
+      raise HTTPException(
+        status_code=408,
+        detail="MOSIP authentication timed out. Please try again."
+      )
 
     # Perform crosschecks with Cast Voter Database
     # Also send results to PrecinctOfficer

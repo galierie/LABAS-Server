@@ -1,7 +1,7 @@
-from reportlab.lib.pagesizes import A4
+from reportlab.lib.pagesizes import letter
 from reportlab.lib.units import mm, inch
 
-PAGE_SIZE = A4
+PAGE_SIZE = letter
 PAGE_WIDTH, PAGE_HEIGHT = PAGE_SIZE
 PAGE_MARGIN = 10 * mm
 

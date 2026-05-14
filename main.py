@@ -408,10 +408,16 @@ async def scan_ballot(request: ScanBallotRequest, db: Session = Depends(db_init)
     position_map = {p.position_id: p for p in positions}
 
     # Group candidates by position to easily display them
-    grouped_candidates: dict[str, list] = defaultdict(list)
+    grouped_candidates: dict[str, dict] = {}
     for candidate in voted_candidates:
-      pos_name = position_map[candidate.position_id].position_name
-      grouped_candidates[pos_name].append(
+      pos = position_map[candidate.position_id]
+      pos_name = pos.position_name
+      if pos_name not in grouped_candidates:
+        grouped_candidates[pos_name] = {
+          "max_votes": pos.max_votes,
+          "candidates": []
+        }
+      grouped_candidates[pos_name]["candidates"].append(
         CandidateDisplay(
           candidate_id=candidate.candidate_id,
           first_name=candidate.first_name,
@@ -423,7 +429,7 @@ async def scan_ballot(request: ScanBallotRequest, db: Session = Depends(db_init)
     return Message(
       type=MessageType.CANDIDATES,
       payload={
-        "candidates": grouped_candidates,
+        "scan_results": grouped_candidates,
         "image_bytes": img_bytes
       }
     ).model_dump()

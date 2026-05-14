@@ -264,6 +264,12 @@ async def print_ballot(province: str, city: str, uin: str, db: Session = Depends
 
     return {"status": "printed"}
   else:
+    # Delete bubble_coordinates entries of voter
+    db.exec(
+      delete(orm.Bubble_Coordinate)
+      .where(orm.Bubble_Coordinate.uin == uin)
+    )
+    db.commit()
     print(f"Error: {result.stderr.decode()}")
     return {"status": "failed"}
 

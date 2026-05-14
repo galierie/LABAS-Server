@@ -396,7 +396,7 @@ async def scan_ballot(request: ScanBallotRequest, db: Session = Depends(db_init)
   try:
     # Perform OMR Scan, ensure that proper errors are sent
     omr_input: OMRInputData = OMRInputData(coords_json=ballot_template, scan_bytes=scan_bytes)
-    voted_candidates_ids, _ = check_page(omr_input)
+    voted_candidates_ids, img_bytes = check_page(omr_input)
 
     voted_candidates = db.exec(
       select(orm.Candidate)
@@ -419,11 +419,12 @@ async def scan_ballot(request: ScanBallotRequest, db: Session = Depends(db_init)
         ).model_dump()
       )
 
-    print(f"Voted candidates: {grouped_candidates}")
-
     return Message(
       type=MessageType.CANDIDATES,
-      payload=grouped_candidates
+      payload={
+        "candidates": grouped_candidates,
+        "image_bytes": img_bytes
+      }
     ).model_dump()
 
   except Exception as e:

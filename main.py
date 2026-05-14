@@ -401,6 +401,7 @@ async def scan_ballot(request: ScanBallotRequest, db: Session = Depends(db_init)
     voted_candidates = db.exec(
       select(orm.Candidate)
       .where(col(orm.Candidate.candidate_id).in_(voted_candidates_ids))
+      .order_by(orm.Candidate.position_id)
     ).all()
 
     positions = db.exec(select(orm.Position)).all()

@@ -397,14 +397,27 @@ async def scan_ballot(request: ScanBallotRequest, db: Session = Depends(db_init)
       .where(col(orm.Candidate.candidate_id).in_(voted_candidates_ids))
     ).all()
 
-    def parse_voted_candidate(candidate: orm.Candidate):
-      return CandidateDisplay(candidate_id=candidate.candidate_id, first_name=candidate.first_name, middle_name=candidate.middle_name, last_name=candidate.last_name)
+    positions = db.exec(select(orm.Position)).all()
+    position_map = {p.position_id: p for p in positions}
 
-    voted_candidates_list = list(map(parse_voted_candidate, voted_candidates))
+    # Group candidates by position to easily display them
+    grouped_candidates: dict[str, list] = defaultdict(list)
+    for candidate in voted_candidates:
+      pos_name = position_map[candidate.position_id].position_name
+      grouped_candidates[pos_name].append(
+        CandidateDisplay(
+          candidate_id=candidate.candidate_id,
+          first_name=candidate.first_name,
+          middle_name=candidate.middle_name,
+          last_name=candidate.last_name
+        ).model_dump()
+      )
+
+    print(f"Voted candidates: {grouped_candidates}")
 
     return Message(
       type=MessageType.CANDIDATES,
-      payload=[voted_candidate.model_dump() for voted_candidate in voted_candidates_list],
+      payload=grouped_candidates
     ).model_dump()
 
   except Exception as e:

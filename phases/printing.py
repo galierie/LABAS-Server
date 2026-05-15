@@ -191,7 +191,7 @@ class CandidateGrid(Flowable):
         n_cols:int=N_COLS,
         bubble_radius:float=BUBBLE_RADIUS,
         font_name:str="NotoSans",
-        font_size:int=8,
+        font_size:int=6,
         max_lines:int=2,
     ):
         Flowable.__init__(self)

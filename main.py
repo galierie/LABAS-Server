@@ -120,7 +120,20 @@ async def scan(payload: ScanRequest):
     dob: str = payload.qr.get("dob", None)
     if uin == None or dob == None:
       raise Exception("QR missing UIN or DOB. Cannot authenticate")
-    mosip_response = kyc_auth(uin, dob)
+
+    loop = asyncio.get_event_loop()
+
+    # Add a timeout for MOSIP auth if it exceeded 1 minute
+    try:
+      mosip_response = await asyncio.wait_for(
+        loop.run_in_executor(None, kyc_auth, uin, dob),
+        timeout=60.0
+      )
+    except asyncio.TimeoutError:
+      raise HTTPException(
+        status_code=408,
+        detail="MOSIP authentication timed out. Please try again."
+      )
 
     # Perform crosschecks with Cast Voter Database
     # Also send results to PrecinctOfficer
@@ -251,6 +264,12 @@ async def print_ballot(province: str, city: str, uin: str, db: Session = Depends
 
     return {"status": "printed"}
   else:
+    # Delete bubble_coordinates entries of voter
+    db.exec(
+      delete(orm.Bubble_Coordinate)
+      .where(orm.Bubble_Coordinate.uin == uin)
+    )
+    db.commit()
     print(f"Error: {result.stderr.decode()}")
     return {"status": "failed"}
 
@@ -377,21 +396,42 @@ async def scan_ballot(request: ScanBallotRequest, db: Session = Depends(db_init)
   try:
     # Perform OMR Scan, ensure that proper errors are sent
     omr_input: OMRInputData = OMRInputData(coords_json=ballot_template, scan_bytes=scan_bytes)
-    voted_candidates_ids, _ = check_page(omr_input)
+    voted_candidates_ids, img_bytes = check_page(omr_input)
 
     voted_candidates = db.exec(
       select(orm.Candidate)
       .where(col(orm.Candidate.candidate_id).in_(voted_candidates_ids))
+      .order_by(orm.Candidate.position_id)
     ).all()
 
-    def parse_voted_candidate(candidate: orm.Candidate):
-      return CandidateDisplay(candidate_id=candidate.candidate_id, first_name=candidate.first_name, middle_name=candidate.middle_name, last_name=candidate.last_name)
+    positions = db.exec(select(orm.Position)).all()
+    position_map = {p.position_id: p for p in positions}
 
-    voted_candidates_list = list(map(parse_voted_candidate, voted_candidates))
+    # Group candidates by position to easily display them
+    grouped_candidates: dict[str, dict] = {}
+    for candidate in voted_candidates:
+      pos = position_map[candidate.position_id]
+      pos_name = pos.position_name
+      if pos_name not in grouped_candidates:
+        grouped_candidates[pos_name] = {
+          "max_votes": pos.max_votes,
+          "candidates": []
+        }
+      grouped_candidates[pos_name]["candidates"].append(
+        CandidateDisplay(
+          candidate_id=candidate.candidate_id,
+          first_name=candidate.first_name,
+          middle_name=candidate.middle_name,
+          last_name=candidate.last_name
+        ).model_dump()
+      )
 
     return Message(
       type=MessageType.CANDIDATES,
-      payload=[voted_candidate.model_dump() for voted_candidate in voted_candidates_list],
+      payload={
+        "scan_results": grouped_candidates,
+        "image_bytes": img_bytes
+      }
     ).model_dump()
 
   except Exception as e:

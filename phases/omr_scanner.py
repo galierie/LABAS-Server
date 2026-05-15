@@ -166,7 +166,7 @@ def check_page(input: OMRInputData, threshold=DEFAULT_THRESHOLD) -> tuple[list[i
     _, buf = cv2.imencode(".png", dbg)
     # cv2.imwrite("debug.png", dbg)
 
-    return results, buf.tobytes()
+    return results, base64.b64encode(buf.tobytes()).decode("utf-8")
 
 
 # def main():
